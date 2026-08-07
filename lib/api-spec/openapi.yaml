@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: expenses
+    description: Expense tracking operations
 paths:
   /healthz:
     get:
@@ -24,7 +26,125 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [expenses]
+      summary: List expenses
+      responses:
+        "200":
+          description: Expenses ordered by date
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
+    post:
+      operationId: createExpense
+      tags: [expenses]
+      summary: Create an expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseInput"
+      responses:
+        "201":
+          description: Created expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "400":
+          description: Invalid expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /expenses/{id}:
+    patch:
+      operationId: updateExpense
+      tags: [expenses]
+      summary: Update an expense
+      parameters:
+        - $ref: "#/components/parameters/ExpenseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseInput"
+      responses:
+        "200":
+          description: Updated expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "400":
+          description: Invalid expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Expense not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteExpense
+      tags: [expenses]
+      summary: Delete an expense
+      parameters:
+        - $ref: "#/components/parameters/ExpenseId"
+      responses:
+        "204":
+          description: Expense deleted
+        "404":
+          description: Expense not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /expenses/summary/monthly:
+    get:
+      operationId: getMonthlySummary
+      tags: [expenses]
+      summary: Get monthly expense summary
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: Month in YYYY-MM format. Defaults to the current month.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+      responses:
+        "200":
+          description: Monthly totals and category breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlySummary"
+        "400":
+          description: Invalid month
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
+  parameters:
+    ExpenseId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: number
+        minimum: 1
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +153,86 @@ components:
           type: string
       required:
         - status
+    Expense:
+      type: object
+      properties:
+        id:
+          type: number
+        title:
+          type: string
+        amount:
+          type: number
+          format: double
+        category:
+          type: string
+          enum: [Utilities, Bazar, One-Time]
+        date:
+          type: string
+          format: date
+        type:
+          type: string
+          enum: [recurring, one-time]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, title, amount, category, date, type, createdAt]
+    ExpenseInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        amount:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        category:
+          type: string
+          enum: [Utilities, Bazar, One-Time]
+        date:
+          type: string
+          format: date
+        type:
+          type: string
+          enum: [recurring, one-time]
+      required: [title, amount, category, date, type]
+    CategoryTotal:
+      type: object
+      properties:
+        category:
+          type: string
+          enum: [Utilities, Bazar, One-Time]
+        total:
+          type: number
+          format: double
+      required: [category, total]
+    MonthlySummary:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        total:
+          type: number
+          format: double
+        transactionCount:
+          type: number
+        recurringTotal:
+          type: number
+          format: double
+        oneTimeTotal:
+          type: number
+          format: double
+        byCategory:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryTotal"
+      required: [month, total, transactionCount, recurringTotal, oneTimeTotal, byCategory]
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
 

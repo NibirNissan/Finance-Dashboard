@@ -1,6 +1,6 @@
-# [Project name]
+# Expanse Tracker
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A personal finance dashboard for logging expenses and understanding monthly spending across utilities, groceries, and one-time costs.
 
 ## Run & Operate
 
@@ -22,23 +22,31 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/expanse-tracker` — responsive React/Vite dashboard.
+- `artifacts/api-server/src/routes/expenses.ts` — validated expense CRUD and monthly summary endpoints.
+- `lib/api-spec/openapi.yaml` — source of truth for the expense API contract.
+- `lib/db/src/schema/expenses.ts` — PostgreSQL expense model and enums.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Calendar dates are stored as PostgreSQL `date` values so expense days are not shifted by timezone conversions.
+- The shared API server and generated OpenAPI clients are used for all expense reads and mutations.
+- Monthly summaries are calculated from the database by category and expense type.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Shows current-month total and transaction count.
+- Supports quick add, editing, deletion, and category filtering.
+- Visualizes Utilities, Bazar, and One-Time spending with live database-backed totals.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+ - Prefer a calm, modern dashboard with clear financial detail and responsive behavior.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run API codegen after changing `lib/api-spec/openapi.yaml`.
+- Normalize date-only API values before display because generated responses may be ISO timestamp-shaped.
 
 ## Pointers
 

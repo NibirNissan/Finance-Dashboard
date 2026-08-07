@@ -1,0 +1,1 @@
+- [Date-only API values](date-only-api-values.md) — normalize ISO timestamps before formatting calendar dates or filling date inputs.

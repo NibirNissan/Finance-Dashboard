@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Expanse Tracker"
+description = "A personal finance dashboard for logging daily and monthly expenses, tracking utility bills and groceries, and understanding spending by category at a glance."
+version = "1.0.0"
+id = "artifacts/expanse-tracker"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18497
+
+[services.development]
+run = "pnpm --filter @workspace/expanse-tracker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/expanse-tracker", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/expanse-tracker/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18497"
+BASE_PATH = "/"
