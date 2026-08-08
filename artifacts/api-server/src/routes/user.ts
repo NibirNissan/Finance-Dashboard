@@ -11,6 +11,10 @@ const UpdateProfileBody = z.object({
   phone: z.string().max(20).nullable().optional(),
 });
 
+const UpdateAccountTypeBody = z.object({
+  accountType: z.enum(["Single Person", "Family"]),
+});
+
 function publicUser(user: typeof usersTable.$inferSelect) {
   return {
     id: user.id,
@@ -28,6 +32,28 @@ function publicUser(user: typeof usersTable.$inferSelect) {
 // GET — return the JIT-provisioned local user attached by requireAuth
 router.get("/user/profile", requireAuth, async (req, res): Promise<void> => {
   res.json(publicUser(req.localUser!));
+});
+
+// PATCH — set account type during onboarding (called once, after sign-up)
+router.patch("/user/account-type", requireAuth, async (req, res): Promise<void> => {
+  const parsed = UpdateAccountTypeBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [user] = await db
+    .update(usersTable)
+    .set({ accountType: parsed.data.accountType })
+    .where(eq(usersTable.id, req.localUser!.id))
+    .returning();
+
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  res.json(publicUser(user));
 });
 
 router.patch("/user/profile", requireAuth, async (req, res): Promise<void> => {

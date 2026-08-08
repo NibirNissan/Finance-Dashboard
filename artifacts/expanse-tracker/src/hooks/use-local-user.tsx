@@ -8,7 +8,7 @@ export interface LocalUser {
   name: string;
   email: string;
   phone: string | null;
-  accountType: "Single Person" | "Family";
+  accountType: "Single Person" | "Family" | null;
   role: "user" | "admin";
   subscriptionPlan: string;
   subscriptionExpiry: string | null;
@@ -21,7 +21,10 @@ export function useLocalUser() {
   const queryClient = useQueryClient();
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-  const { data: user = null } = useQuery<LocalUser>({
+  const {
+    data: user = null,
+    isPending: isProfilePending,
+  } = useQuery<LocalUser>({
     queryKey: ["local-user-profile"],
     queryFn: async () => {
       const res = await fetch(`${BASE_URL}/api/user/profile`);
@@ -40,10 +43,13 @@ export function useLocalUser() {
     queryClient.setQueryData(["local-user-profile"], updated);
   };
 
+  // isLoading: true until BOTH Clerk and the profile query have resolved
+  const isLoading = !isLoaded || (!!isSignedIn && isProfilePending);
+
   return {
     user,
     isAuthenticated: !!isSignedIn && isLoaded,
-    isLoading: !isLoaded,
+    isLoading,
     logout,
     updateUser,
   };

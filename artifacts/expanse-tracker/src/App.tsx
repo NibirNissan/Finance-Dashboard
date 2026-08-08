@@ -23,6 +23,7 @@ import Landing from "@/pages/landing";
 import Profile from "@/pages/profile";
 import Pricing from "@/pages/pricing";
 import Admin from "@/pages/admin";
+import Onboarding from "@/pages/onboarding";
 import { useLocalUser } from "@/hooks/use-local-user";
 
 // ── Clerk config (copy verbatim — resolved at runtime from hostname) ──────────
@@ -163,14 +164,40 @@ function HomeRedirect() {
 
 function PrivateRoute({ component: Component }: { component: React.ComponentType }) {
   const { isSignedIn, isLoaded } = useAuth();
+  const { user, isLoading: userLoading } = useLocalUser();
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) navigate("/");
-  }, [isSignedIn, isLoaded, navigate]);
+    if (!isLoaded) return;
+    if (!isSignedIn) { navigate("/"); return; }
+    // Once user profile is fetched, gate on onboarding
+    if (!userLoading && user && user.accountType === null) {
+      navigate("/onboarding");
+    }
+  }, [isSignedIn, isLoaded, user, userLoading, navigate]);
 
-  if (!isLoaded || !isSignedIn) return null;
+  if (!isLoaded || !isSignedIn || userLoading || !user) return null;
+  if (user.accountType === null) return null;
   return <Component />;
+}
+
+function OnboardingRoute() {
+  const { isSignedIn, isLoaded } = useAuth();
+  const { user, isLoading: userLoading } = useLocalUser();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) { navigate("/sign-in"); return; }
+    // Already onboarded — send to dashboard
+    if (!userLoading && user && user.accountType !== null) {
+      navigate("/dashboard");
+    }
+  }, [isSignedIn, isLoaded, user, userLoading, navigate]);
+
+  if (!isLoaded || !isSignedIn || userLoading) return null;
+  if (user && user.accountType !== null) return null;
+  return <Onboarding />;
 }
 
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
@@ -197,6 +224,7 @@ function Router() {
       {/* REQUIRED: /*? optional wildcard handles Clerk's OAuth sub-paths */}
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
+      <Route path="/onboarding" component={OnboardingRoute} />
       <Route path="/dashboard">
         {() => <PrivateRoute component={Dashboard} />}
       </Route>

@@ -13,7 +13,7 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash"),
   phone: text("phone"),
-  accountType: accountTypeEnum("account_type").notNull().default("Single Person"),
+  accountType: accountTypeEnum("account_type"),
   role: userRoleEnum("role").notNull().default("user"),
   subscriptionPlan: text("subscription_plan").notNull().default("free"),
   subscriptionExpiry: timestamp("subscription_expiry", { withTimezone: true }),
