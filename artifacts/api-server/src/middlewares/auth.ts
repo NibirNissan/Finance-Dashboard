@@ -35,7 +35,7 @@ export async function requireAuth(
 
     if (!localUser) {
       // 2. JIT provision: fetch identity from Clerk
-      const clerkUser = await clerkClient().users.getUser(clerkUserId);
+      const clerkUser = await clerkClient.users.getUser(clerkUserId);
       const email = clerkUser.emailAddresses[0]?.emailAddress ?? "";
       const firstName = clerkUser.firstName ?? "";
       const lastName = clerkUser.lastName ?? "";
@@ -62,7 +62,7 @@ export async function requireAuth(
         // Create a fresh local account
         [localUser] = await db
           .insert(usersTable)
-          .values({ clerkUserId, name, email, passwordHash: null })
+          .values({ clerkUserId, name, email })
           .returning();
       }
     }

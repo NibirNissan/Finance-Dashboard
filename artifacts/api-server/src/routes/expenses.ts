@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db, expensesTable, categoriesTable } from "@workspace/db";
 import {
   CreateExpenseBody,
@@ -35,7 +35,7 @@ router.get("/expenses", requireAuth, async (req, res): Promise<void> => {
   const expenses = await db
     .select()
     .from(expensesTable)
-    .where(or(eq(expensesTable.userId, userId), isNull(expensesTable.userId)))
+    .where(eq(expensesTable.userId, userId))
     .orderBy(desc(expensesTable.date), desc(expensesTable.createdAt));
 
   res.json(ListExpensesResponse.parse(expenses));
@@ -79,7 +79,12 @@ router.patch("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
       ...parsed.data,
       date: parsed.data.date.toISOString().slice(0, 10),
     })
-    .where(eq(expensesTable.id, params.data.id))
+    .where(
+      and(
+        eq(expensesTable.id, params.data.id),
+        eq(expensesTable.userId, req.localUser!.id),
+      ),
+    )
     .returning();
 
   if (!expense) {
@@ -129,7 +134,7 @@ router.get(
     const month = parsedParams.data.month ?? currentMonth();
     const { start, end } = monthBounds(month);
     const where = and(
-      or(eq(expensesTable.userId, userId), isNull(expensesTable.userId)),
+      eq(expensesTable.userId, userId),
       gte(expensesTable.date, start),
       lt(expensesTable.date, end),
     );

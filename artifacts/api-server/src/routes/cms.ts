@@ -98,7 +98,7 @@ router.post("/admin/categories", requireAuth, requireAdmin, async (req, res): Pr
 });
 
 router.patch("/admin/categories/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const parsed = CategoryBody.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
@@ -108,7 +108,7 @@ router.patch("/admin/categories/:id", requireAuth, requireAdmin, async (req, res
 });
 
 router.delete("/admin/categories/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const [row] = await db.delete(categoriesTable).where(eq(categoriesTable.id, id)).returning({ id: categoriesTable.id });
   if (!row) { res.status(404).json({ error: "Category not found" }); return; }
@@ -140,7 +140,7 @@ router.post("/admin/pricing-plans", requireAuth, requireAdmin, async (req, res):
 });
 
 router.patch("/admin/pricing-plans/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const parsed = PlanBody.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
@@ -150,7 +150,7 @@ router.patch("/admin/pricing-plans/:id", requireAuth, requireAdmin, async (req, 
 });
 
 router.delete("/admin/pricing-plans/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const [row] = await db.delete(pricingPlansTable).where(eq(pricingPlansTable.id, id)).returning({ id: pricingPlansTable.id });
   if (!row) { res.status(404).json({ error: "Plan not found" }); return; }
