@@ -4,3 +4,4 @@ export * from "./categories";
 export * from "./system-settings";
 export * from "./users";
 export * from "./expenses";
+export * from "./admin-logs";

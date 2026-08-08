@@ -1,11 +1,13 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { count, eq, ne, and, gt, isNull } from "drizzle-orm";
-import { db, usersTable, expensesTable } from "@workspace/db";
+import { count, desc, eq, ne, and, gt, isNull } from "drizzle-orm";
+import { db, usersTable, expensesTable, adminLogsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin } from "../middlewares/admin";
 
 const router: IRouter = Router();
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function publicUser(user: typeof usersTable.$inferSelect) {
   return {
@@ -21,6 +23,12 @@ function publicUser(user: typeof usersTable.$inferSelect) {
     createdAt: user.createdAt.toISOString(),
   };
 }
+
+async function insertLog(adminId: number, actionType: string, description: string) {
+  await db.insert(adminLogsTable).values({ adminId, actionType, description });
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
 
 router.get("/admin/stats", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
   const now = new Date();
@@ -48,6 +56,8 @@ router.get("/admin/stats", requireAuth, requireAdmin, async (_req, res): Promise
   res.json({ totalUsers: Number(totalUsers), activeSubscribers, totalRevenue });
 });
 
+// ── Users ─────────────────────────────────────────────────────────────────────
+
 router.get("/admin/users", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
   const users = await db
     .select()
@@ -63,21 +73,15 @@ router.post(
   requireAdmin,
   async (req, res): Promise<void> => {
     const id = parseInt(String(req.params.id), 10);
-    if (isNaN(id)) {
-      res.status(400).json({ error: "Invalid user ID" });
-      return;
-    }
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
     const [existing] = await db
-      .select({ status: usersTable.status })
+      .select({ status: usersTable.status, name: usersTable.name })
       .from(usersTable)
       .where(eq(usersTable.id, id))
       .limit(1);
 
-    if (!existing) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
+    if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
     const newStatus = existing.status === "active" ? "suspended" : "active";
     const [user] = await db
@@ -85,6 +89,15 @@ router.post(
       .set({ status: newStatus })
       .where(eq(usersTable.id, id))
       .returning();
+
+    // Activity log
+    const actionType = newStatus === "suspended" ? "suspend_user" : "unban_user";
+    const verb = newStatus === "suspended" ? "Suspended" : "Unbanned";
+    await insertLog(
+      req.localUser!.id,
+      actionType,
+      `${verb} user "${existing.name}" (id: ${id})`,
+    );
 
     res.json(publicUser(user));
   },
@@ -100,21 +113,21 @@ router.post(
   requireAdmin,
   async (req, res): Promise<void> => {
     const id = parseInt(String(req.params.id), 10);
-    if (isNaN(id)) {
-      res.status(400).json({ error: "Invalid user ID" });
-      return;
-    }
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
     const parsed = UpgradeBody.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
-      return;
-    }
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const { plan } = parsed.data;
     const expiry = new Date();
     if (plan === "monthly") expiry.setMonth(expiry.getMonth() + 1);
     else expiry.setFullYear(expiry.getFullYear() + 1);
+
+    const [existing] = await db
+      .select({ name: usersTable.name })
+      .from(usersTable)
+      .where(eq(usersTable.id, id))
+      .limit(1);
 
     const [user] = await db
       .update(usersTable)
@@ -122,14 +135,40 @@ router.post(
       .where(eq(usersTable.id, id))
       .returning();
 
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+    // Activity log
+    await insertLog(
+      req.localUser!.id,
+      "upgrade_user",
+      `Manually upgraded "${existing?.name ?? `user #${id}`}" to ${plan} plan`,
+    );
 
     res.json(publicUser(user));
   },
 );
+
+// ── Activity Logs ─────────────────────────────────────────────────────────────
+
+router.get("/admin/logs", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
+  const logs = await db
+    .select()
+    .from(adminLogsTable)
+    .orderBy(desc(adminLogsTable.createdAt))
+    .limit(500);
+
+  res.json(
+    logs.map((l) => ({
+      id: l.id,
+      adminId: l.adminId,
+      actionType: l.actionType,
+      description: l.description,
+      createdAt: l.createdAt.toISOString(),
+    })),
+  );
+});
+
+// ── Orphan cleanup ────────────────────────────────────────────────────────────
 
 router.post(
   "/admin/expenses/purge-orphaned",
