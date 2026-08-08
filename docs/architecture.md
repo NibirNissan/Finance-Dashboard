@@ -66,7 +66,7 @@
 | id | serial PK | |
 | name | text NOT NULL | |
 | email | text NOT NULL UNIQUE | |
-| password_hash | text NOT NULL | bcrypt, cost 12 |
+| password_hash | text **nullable** | bcrypt, cost 12; NULL for Clerk-only accounts |
 | phone | text nullable | |
 | account_type | enum(`Single Person`, `Family`) | default `Single Person` |
 | role | enum(`user`, `admin`) | default `user` |
@@ -79,7 +79,7 @@
 | Column | Type | Notes |
 |---|---|---|
 | id | serial PK | |
-| user_id | int nullable FK → users.id | nullable for backward compat |
+| user_id | int NOT NULL FK → users.id | required; orphaned rows purged by Task #10 |
 | title | text NOT NULL | 1–120 chars |
 | amount | numeric(12,2) NOT NULL | BDT, must be > 0 |
 | category | text NOT NULL | dynamic; driven by `categories` table |
@@ -120,26 +120,24 @@
 | id | serial PK | always exactly 1 row |
 | announcement_text | text | shown as banner on dashboard when active |
 | is_announcement_active | boolean | default false |
-| allow_registrations | boolean | default true; blocks `POST /api/auth/register` when false |
+| allow_registrations | boolean | default true; reserved for future registration gating |
 | updated_at | timestamptz | auto |
 
 ## API Routes Summary
 
 ### Public (no auth)
 - `GET /api/healthz`
-- `POST /api/auth/register` — respects `allow_registrations` setting
-- `POST /api/auth/login`
 - `GET /api/categories`
 - `GET /api/pricing-plans`
 - `GET /api/settings`
 
-### Authenticated (Bearer JWT)
+### Authenticated (Clerk session cookie)
 - `GET|PATCH /api/user/profile`
 - `GET|POST|PATCH|DELETE /api/expenses`
 - `GET /api/expenses/summary/monthly?month=YYYY-MM`
 - `POST /api/subscription/upgrade` — body: `{ planId: number }`
 
-### Admin only (Bearer JWT + role=admin)
+### Admin only (Clerk session cookie + role=admin)
 - `GET /api/admin/stats`
 - `GET /api/admin/users`
 - `POST /api/admin/user/:id/toggle-status`
