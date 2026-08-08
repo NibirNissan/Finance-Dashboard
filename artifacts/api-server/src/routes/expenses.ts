@@ -5,6 +5,8 @@ import {
   CreateExpenseBody,
   CreateExpenseResponse,
   DeleteExpenseParams,
+  GetExpenseHistoryQueryParams,
+  GetExpenseHistoryResponse,
   GetMonthlySummaryQueryParams,
   GetMonthlySummaryResponse,
   ListExpensesResponse,
@@ -119,6 +121,127 @@ router.delete("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
 
   res.sendStatus(204);
 });
+
+const MAX_HISTORY_MONTHS = 24;
+
+function isValidCalendarMonth(month: string): boolean {
+  const [, m] = month.split("-").map(Number);
+  return m >= 1 && m <= 12;
+}
+
+router.get(
+  "/expenses/history",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const parsedParams = GetExpenseHistoryQueryParams.safeParse(req.query);
+    if (!parsedParams.success) {
+      res.status(400).json({ error: parsedParams.error.message });
+      return;
+    }
+
+    const userId = req.localUser!.id;
+    const toMonth = parsedParams.data.to ?? currentMonth();
+    const fromMonth = (() => {
+      if (parsedParams.data.from) return parsedParams.data.from;
+      // Default to 5 months ago so we get 6 months total (from..to inclusive)
+      const [year, month] = toMonth.split("-").map(Number);
+      const d = new Date(year, month - 1 - 5, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    })();
+
+    // Semantic validation: calendar months must be valid (01-12) and ordered
+    if (!isValidCalendarMonth(fromMonth)) {
+      res.status(400).json({ error: `Invalid month: ${fromMonth}` });
+      return;
+    }
+    if (!isValidCalendarMonth(toMonth)) {
+      res.status(400).json({ error: `Invalid month: ${toMonth}` });
+      return;
+    }
+    if (fromMonth > toMonth) {
+      res.status(400).json({ error: "'from' must not be after 'to'" });
+      return;
+    }
+
+    // Build month list first so we can enforce the max range before any DB query
+    const months: string[] = [];
+    let cursor = fromMonth;
+    while (cursor <= toMonth) {
+      months.push(cursor);
+      if (months.length > MAX_HISTORY_MONTHS) {
+        res.status(400).json({ error: `Date range exceeds maximum of ${MAX_HISTORY_MONTHS} months` });
+        return;
+      }
+      const [y, m] = cursor.split("-").map(Number);
+      const next = new Date(y, m, 1);
+      cursor = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    const { start } = monthBounds(fromMonth);
+    const { end } = monthBounds(toMonth);
+
+    // Get all expenses in the range, grouped by month (YYYY-MM), category, and type
+    const rows = await db
+      .select({
+        month: sql<string>`to_char(${expensesTable.date}, 'YYYY-MM')`,
+        category: expensesTable.category,
+        type: expensesTable.type,
+        total: sql<number>`coalesce(sum(${expensesTable.amount}), 0)`,
+        count: sql<number>`count(*)`,
+      })
+      .from(expensesTable)
+      .where(
+        and(
+          eq(expensesTable.userId, userId),
+          gte(expensesTable.date, start),
+          lt(expensesTable.date, end),
+        ),
+      )
+      .groupBy(
+        sql`to_char(${expensesTable.date}, 'YYYY-MM')`,
+        expensesTable.category,
+        expensesTable.type,
+      )
+      .orderBy(sql`to_char(${expensesTable.date}, 'YYYY-MM')`);
+
+    // Fetch active categories for zero-filling
+    const activeCategories = await db
+      .select({ name: categoriesTable.name })
+      .from(categoriesTable)
+      .where(eq(categoriesTable.isActive, true))
+      .orderBy(asc(categoriesTable.sortOrder), asc(categoriesTable.name));
+    const knownCategoryNames = activeCategories.map((c) => c.name);
+
+    const summaries = months.map((month) => {
+      const monthRows = rows.filter((r) => r.month === month);
+      const total = monthRows.reduce((s, r) => s + Number(r.total), 0);
+      const transactionCount = monthRows.reduce((s, r) => s + Number(r.count), 0);
+      const recurringTotal = monthRows
+        .filter((r) => r.type === "recurring")
+        .reduce((s, r) => s + Number(r.total), 0);
+      const oneTimeTotal = monthRows
+        .filter((r) => r.type === "one-time")
+        .reduce((s, r) => s + Number(r.total), 0);
+
+      // Category totals
+      const categoryMap = new Map<string, number>();
+      for (const r of monthRows) {
+        categoryMap.set(r.category, (categoryMap.get(r.category) ?? 0) + Number(r.total));
+      }
+      // Include extra categories not in known list
+      const extraNames = [...categoryMap.keys()].filter((c) => !knownCategoryNames.includes(c));
+      const allNames = [...knownCategoryNames, ...extraNames];
+      const byCategory = allNames.map((category) => ({
+        category,
+        total: categoryMap.get(category) ?? 0,
+      }));
+
+      return { month, total, transactionCount, recurringTotal, oneTimeTotal, byCategory };
+    });
+
+    res.json(GetExpenseHistoryResponse.parse(summaries));
+  },
+);
 
 router.get(
   "/expenses/summary/monthly",

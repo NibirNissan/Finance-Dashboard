@@ -109,6 +109,35 @@ export const DeleteExpenseResponse = zod.void()
 
 
 /**
+ * @summary Get monthly totals history over a date range
+ */
+export const getExpenseHistoryQueryFromRegExp = new RegExp('^\\d{4}-\\d{2}$');
+export const getExpenseHistoryQueryToRegExp = new RegExp('^\\d{4}-\\d{2}$');
+
+
+export const GetExpenseHistoryQueryParams = zod.object({
+  "from": zod.coerce.string().regex(getExpenseHistoryQueryFromRegExp).optional().describe('Start month in YYYY-MM format. Defaults to 6 months ago.'),
+  "to": zod.coerce.string().regex(getExpenseHistoryQueryToRegExp).optional().describe('End month in YYYY-MM format. Defaults to the current month.')
+})
+
+export const getExpenseHistoryResponseMonthRegExp = new RegExp('^\\d{4}-\\d{2}$');
+
+
+export const GetExpenseHistoryResponseItem = zod.object({
+  "month": zod.string().regex(getExpenseHistoryResponseMonthRegExp),
+  "total": zod.number(),
+  "transactionCount": zod.number(),
+  "recurringTotal": zod.number(),
+  "oneTimeTotal": zod.number(),
+  "byCategory": zod.array(zod.object({
+  "category": zod.string(),
+  "total": zod.number()
+}))
+})
+export const GetExpenseHistoryResponse = zod.array(GetExpenseHistoryResponseItem)
+
+
+/**
  * @summary Get monthly expense summary
  */
 export const getMonthlySummaryQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}$');

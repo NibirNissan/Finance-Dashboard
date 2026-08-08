@@ -6,13 +6,24 @@ import { useLocalUser } from "@/hooks/use-local-user";
 import {
   useCreateExpense,
   useDeleteExpense,
+  useGetExpenseHistory,
   useGetMonthlySummary,
   useListExpenses,
   useUpdateExpense,
   getListExpensesQueryKey,
   getGetMonthlySummaryQueryKey,
+  getGetExpenseHistoryQueryKey,
 } from "@workspace/api-client-react";
 import type { Expense, ExpenseInput } from "@workspace/api-client-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -245,6 +256,10 @@ export default function Dashboard() {
     return map;
   }, [fetchedCategories]);
 
+  // History covers the 6 months ending on the selected month
+  const historyTo = selectedMonth;
+  const historyFrom = useMemo(() => shiftMonth(selectedMonth, -5), [selectedMonth]);
+
   const list = useListExpenses({
     query: { queryKey: getListExpensesQueryKey() },
   });
@@ -253,6 +268,14 @@ export default function Dashboard() {
     {
       query: {
         queryKey: getGetMonthlySummaryQueryKey({ month: selectedMonth }),
+      },
+    },
+  );
+  const history = useGetExpenseHistory(
+    { from: historyFrom, to: historyTo },
+    {
+      query: {
+        queryKey: getGetExpenseHistoryQueryKey({ from: historyFrom, to: historyTo }),
       },
     },
   );
@@ -299,6 +322,9 @@ export default function Dashboard() {
     void queryClient.invalidateQueries({ queryKey: getListExpensesQueryKey() });
     void queryClient.invalidateQueries({
       queryKey: getGetMonthlySummaryQueryKey({ month: selectedMonth }),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: getGetExpenseHistoryQueryKey({ from: historyFrom, to: historyTo }),
     });
   };
   const done = () => {
@@ -548,7 +574,80 @@ export default function Dashboard() {
               </div>
             </section>
           </div>
-          <section className="mt-8 rise delay-2">
+          {/* Spending trend chart */}
+          <section className="mt-8 rounded-2xl border bg-card p-6 shadow-sm md:p-8 rise delay-2">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[.15em] text-muted-foreground">Month over month</p>
+                <h2 className="mt-1 font-serif text-2xl">Spending trends</h2>
+              </div>
+              <span className="font-mono text-xs text-muted-foreground mt-1">
+                {new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(new Date(`${historyFrom}-01T12:00:00`))}
+                {" – "}
+                {new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(new Date(`${historyTo}-01T12:00:00`))}
+              </span>
+            </div>
+            {history.isLoading ? (
+              <div className="h-[220px] animate-pulse rounded-xl bg-muted" />
+            ) : history.isError ? (
+              <div className="grid h-[220px] place-items-center text-sm text-muted-foreground">
+                Couldn't load trend data.
+              </div>
+            ) : !history.data || history.data.every((m) => m.total === 0) ? (
+              <div className="grid h-[220px] place-items-center gap-2 text-center">
+                <p className="text-sm text-muted-foreground">No spending recorded in this period yet.</p>
+              </div>
+            ) : (() => {
+              // Collect ALL categories that have any spending across the history window
+              // (includes inactive/legacy categories the API returns alongside active ones)
+              const allHistoryCategories: string[] = [];
+              for (const m of history.data ?? []) {
+                for (const b of m.byCategory) {
+                  if (b.total > 0 && !allHistoryCategories.includes(b.category)) {
+                    allHistoryCategories.push(b.category);
+                  }
+                }
+              }
+              // Build recharts data: one entry per month with every category keyed
+              const chartData = (history.data ?? []).map((m) => {
+                const entry: Record<string, string | number> = {
+                  month: new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(`${m.month}-01T12:00:00`)),
+                };
+                for (const cat of m.byCategory) {
+                  if (cat.total > 0) entry[cat.category] = cat.total;
+                }
+                return entry;
+              });
+              // Stable color: prefer palette slot from fetched active categories, fall back to index
+              const colorFor = (name: string, fallbackIdx: number) =>
+                categoryColorMap[name] ?? getCategoryColor(name, fallbackIdx);
+              return (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%">
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <YAxis
+                      tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={38}
+                    />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [money(value), name]}
+                      contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--card)", color: "var(--foreground)" }}
+                      cursor={{ fill: "var(--muted)", opacity: 0.5 }}
+                    />
+                    <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
+                    {allHistoryCategories.map((name, i) => (
+                      <Bar key={name} dataKey={name} stackId="a" fill={colorFor(name, i)} radius={i === allHistoryCategories.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
+          </section>
+
+          <section className="mt-8 rise delay-3">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[.15em] text-muted-foreground">The paper trail</p>

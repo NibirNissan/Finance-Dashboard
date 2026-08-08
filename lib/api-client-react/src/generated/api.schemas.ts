@@ -67,6 +67,19 @@ export interface ErrorResponse {
   error: string;
 }
 
+export type GetExpenseHistoryParams = {
+/**
+ * Start month in YYYY-MM format. Defaults to 6 months ago.
+ * @pattern ^\d{4}-\d{2}$
+ */
+from?: string;
+/**
+ * End month in YYYY-MM format. Defaults to the current month.
+ * @pattern ^\d{4}-\d{2}$
+ */
+to?: string;
+};
+
 export type GetMonthlySummaryParams = {
 /**
  * Month in YYYY-MM format. Defaults to the current month.

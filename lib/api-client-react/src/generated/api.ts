@@ -23,6 +23,7 @@ import type {
   ErrorResponse,
   Expense,
   ExpenseInput,
+  GetExpenseHistoryParams,
   GetMonthlySummaryParams,
   HealthStatus,
   MonthlySummary
@@ -423,6 +424,90 @@ export const useDeleteExpense = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getDeleteExpenseMutationOptions(options));
     }
+
+export const getGetExpenseHistoryUrl = (params?: GetExpenseHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/expenses/history?${stringifiedParams}` : `/api/expenses/history`
+}
+
+/**
+ * @summary Get monthly totals history over a date range
+ */
+export const getExpenseHistory = async (params?: GetExpenseHistoryParams, options?: Parameters<typeof customFetch>[1]): Promise<MonthlySummary[]> => {
+
+  return customFetch<MonthlySummary[]>(getGetExpenseHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetExpenseHistoryQueryKey = (params?: GetExpenseHistoryParams,) => {
+    return [
+    `/api/expenses/history`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetExpenseHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getExpenseHistory>>, TError = ErrorType<ErrorResponse>>(params?: GetExpenseHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getExpenseHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetExpenseHistoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getExpenseHistory>>> = ({ signal }) => getExpenseHistory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getExpenseHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetExpenseHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getExpenseHistory>>>
+export type GetExpenseHistoryQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get monthly totals history over a date range
+ */
+
+export function useGetExpenseHistory<TData = Awaited<ReturnType<typeof getExpenseHistory>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetExpenseHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getExpenseHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetExpenseHistoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetMonthlySummaryUrl = (params?: GetMonthlySummaryParams,) => {
   const normalizedParams = new URLSearchParams();
