@@ -53,7 +53,7 @@ export const CreateExpenseBody = zod.object({
   "amount": zod.number().gt(createExpenseBodyAmountExclusiveMin),
   "category": zod.string(),
   "date": zod.coerce.date(),
-  "type": zod.enum(["recurring", "one-time"]),
+  "type": zod.enum(["recurring", "one-time"]).optional().default("one-time"),
   "note": zod.string().max(createExpenseBodyNoteMax).nullish()
 })
 
@@ -96,7 +96,7 @@ export const UpdateExpenseBody = zod.object({
   "amount": zod.number().gt(updateExpenseBodyAmountExclusiveMin),
   "category": zod.string(),
   "date": zod.coerce.date(),
-  "type": zod.enum(["recurring", "one-time"]),
+  "type": zod.enum(["recurring", "one-time"]).optional().default("one-time"),
   "note": zod.string().max(updateExpenseBodyNoteMax).nullish()
 })
 

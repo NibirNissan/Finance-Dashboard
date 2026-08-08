@@ -32,6 +32,7 @@ import {
   ArrowUpRight,
   CalendarDays,
   CircleDollarSign,
+  Clock,
   Download,
   Loader2,
   Moon,
@@ -266,6 +267,12 @@ export default function Dashboard() {
     queryFn: async () => { const r = await fetch(`${BASE_URL}/api/settings`); return r.json(); },
     staleTime: 30_000,
   });
+  const { data: pendingPayment } = useQuery<{ hasPending: boolean; request: { paymentMethod: string; trxId: string } | null }>({
+    queryKey: ["payment-pending"],
+    queryFn: async () => { const r = await fetch(`${BASE_URL}/api/payments/pending`); return r.json(); },
+    staleTime: 60_000,
+    enabled: !!user,
+  });
   const categoryColorMap = useMemo(() => {
     const map: Record<string, string> = {};
     fetchedCategories.forEach((c, i) => { map[c.name] = getCategoryColor(c.name, i); });
@@ -462,6 +469,15 @@ export default function Dashboard() {
         {settings?.isAnnouncementActive && settings?.announcementText && (
           <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 text-sm text-amber-800 text-center font-medium">
             📢 {settings.announcementText}
+          </div>
+        )}
+        {pendingPayment?.hasPending && (
+          <div className="bg-blue-50 border-b border-blue-200 px-6 py-3 text-sm text-blue-800 text-center font-medium flex items-center justify-center gap-2">
+            <Clock size={15} className="flex-shrink-0" />
+            <span>
+              Your payment via <strong>{pendingPayment.request?.paymentMethod}</strong> is pending verification.
+              Your subscription will be activated once an admin approves it.
+            </span>
           </div>
         )}
         <header className="border-b border-border/70 px-5 py-5 md:px-10 md:py-7">

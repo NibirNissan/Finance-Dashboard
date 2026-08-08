@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { count, desc, eq, ne, and, gt, isNull } from "drizzle-orm";
-import { db, usersTable, expensesTable, adminLogsTable } from "@workspace/db";
+import { db, usersTable, expensesTable, adminLogsTable, paymentRequestsTable, pricingPlansTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin } from "../middlewares/admin";
 
@@ -166,6 +166,110 @@ router.get("/admin/logs", requireAuth, requireAdmin, async (_req, res): Promise<
       createdAt: l.createdAt.toISOString(),
     })),
   );
+});
+
+// ── Payment Verification ──────────────────────────────────────────────────────
+
+router.get("/admin/payments", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      id: paymentRequestsTable.id,
+      userId: paymentRequestsTable.userId,
+      planId: paymentRequestsTable.planId,
+      paymentMethod: paymentRequestsTable.paymentMethod,
+      senderNumber: paymentRequestsTable.senderNumber,
+      trxId: paymentRequestsTable.trxId,
+      status: paymentRequestsTable.status,
+      createdAt: paymentRequestsTable.createdAt,
+      userName: usersTable.name,
+      userEmail: usersTable.email,
+      planName: pricingPlansTable.planName,
+      planSlug: pricingPlansTable.slug,
+      durationInMonths: pricingPlansTable.durationInMonths,
+    })
+    .from(paymentRequestsTable)
+    .leftJoin(usersTable, eq(paymentRequestsTable.userId, usersTable.id))
+    .leftJoin(pricingPlansTable, eq(paymentRequestsTable.planId, pricingPlansTable.id))
+    .orderBy(desc(paymentRequestsTable.createdAt))
+    .limit(500);
+
+  res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
+});
+
+router.post("/admin/payments/:id/approve", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+  // Pre-fetch plan outside the transaction so we can return 404 before acquiring locks
+  const [pr] = await db
+    .select()
+    .from(paymentRequestsTable)
+    .where(eq(paymentRequestsTable.id, id))
+    .limit(1);
+
+  if (!pr) { res.status(404).json({ error: "Payment request not found" }); return; }
+  if (pr.status !== "pending") { res.status(409).json({ error: "Request already processed" }); return; }
+
+  const [plan] = await db
+    .select()
+    .from(pricingPlansTable)
+    .where(eq(pricingPlansTable.id, pr.planId))
+    .limit(1);
+
+  if (!plan) { res.status(404).json({ error: "Plan not found" }); return; }
+
+  const expiry = new Date();
+  expiry.setMonth(expiry.getMonth() + plan.durationInMonths);
+
+  // Atomically mark request approved + activate subscription
+  await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(paymentRequestsTable)
+      .set({ status: "approved" })
+      .where(and(eq(paymentRequestsTable.id, id), eq(paymentRequestsTable.status, "pending")))
+      .returning({ id: paymentRequestsTable.id });
+
+    if (!updated) throw new Error("Request was already processed by another admin");
+
+    await tx
+      .update(usersTable)
+      .set({ subscriptionPlan: plan.slug, subscriptionExpiry: expiry })
+      .where(eq(usersTable.id, pr.userId));
+  });
+
+  await insertLog(req.localUser!.id, "approve_payment", `Approved payment request #${id} (trxId: ${pr.trxId}) — upgraded user #${pr.userId} to ${plan.slug}`);
+
+  res.json({ ok: true });
+});
+
+router.post("/admin/payments/:id/reject", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+  const [pr] = await db
+    .select()
+    .from(paymentRequestsTable)
+    .where(eq(paymentRequestsTable.id, id))
+    .limit(1);
+
+  if (!pr) { res.status(404).json({ error: "Payment request not found" }); return; }
+  if (pr.status !== "pending") { res.status(409).json({ error: "Request already processed" }); return; }
+
+  // Conditional update — only succeeds if status is still pending (prevents approve/reject race)
+  const [updated] = await db
+    .update(paymentRequestsTable)
+    .set({ status: "rejected" })
+    .where(and(eq(paymentRequestsTable.id, id), eq(paymentRequestsTable.status, "pending")))
+    .returning({ id: paymentRequestsTable.id });
+
+  if (!updated) {
+    res.status(409).json({ error: "Request was already processed by another admin" });
+    return;
+  }
+
+  await insertLog(req.localUser!.id, "reject_payment", `Rejected payment request #${id} (trxId: ${pr.trxId}) for user #${pr.userId}`);
+
+  res.json({ ok: true });
 });
 
 // ── Orphan cleanup ────────────────────────────────────────────────────────────

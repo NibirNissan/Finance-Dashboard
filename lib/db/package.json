@@ -9,7 +9,8 @@
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
+    "migrate": "node -e \"const {Pool}=require('pg');const fs=require('fs');const p=new Pool({connectionString:process.env.DATABASE_URL});p.query(fs.readFileSync('./migrations/001_payment_requests.sql','utf8')).then(()=>{console.log('Migration applied');p.end()}).catch(e=>{console.error(e.message);p.end();process.exit(1)})\""
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

@@ -17,7 +17,7 @@ export interface ExpenseInput {
   amount: number;
   category: string;
   date: Date;
-  type: ExpenseInputType;
+  type?: ExpenseInputType;
   /**
      * @maxLength 500
      * @nullable

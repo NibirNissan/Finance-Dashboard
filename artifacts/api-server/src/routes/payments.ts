@@ -1,198 +1,94 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import {
-  db,
-  paymentRequestsTable,
-  pricingPlansTable,
-} from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import { db, paymentRequestsTable, pricingPlansTable, systemSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
-import { requireAdmin } from "../middlewares/admin";
 
 const router: IRouter = Router();
 
-// ── User: submit a payment request ───────────────────────────────────────────
-
 const SubmitBody = z.object({
   planId: z.number().int().positive(),
-  paymentMethod: z.enum(["bkash", "nagad"]),
-  senderNumber: z.string().min(1, "Sender number is required"),
-  transactionId: z.string().min(1, "Transaction ID is required"),
+  paymentMethod: z.enum(["bKash", "Nagad"]),
+  senderNumber: z.string().min(5).max(20),
+  trxId: z.string().min(3).max(60),
 });
 
+// GET /api/payments/pending — check if the current user has a pending payment request
+router.get("/payments/pending", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.localUser!.id;
+  const rows = await db
+    .select()
+    .from(paymentRequestsTable)
+    .where(and(eq(paymentRequestsTable.userId, userId), eq(paymentRequestsTable.status, "pending")))
+    .limit(1);
+
+  res.json({ hasPending: rows.length > 0, request: rows[0] ?? null });
+});
+
+// GET /api/payments/numbers — return admin-configured bKash/Nagad numbers (authenticated)
+router.get("/payments/numbers", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db.select().from(systemSettingsTable).limit(1);
+  if (rows.length === 0) {
+    res.json({ bkashNumber: "", nagadNumber: "" });
+    return;
+  }
+  const { bkashNumber, nagadNumber } = rows[0];
+  res.json({ bkashNumber, nagadNumber });
+});
+
+// POST /api/payments/submit
 router.post("/payments/submit", requireAuth, async (req, res): Promise<void> => {
   const parsed = SubmitBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid input" });
+    res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const { planId, paymentMethod, senderNumber, transactionId } = parsed.data;
   const userId = req.localUser!.id;
+  const { planId, paymentMethod, senderNumber, trxId } = parsed.data;
 
-  // Verify plan exists
+  // Ensure the plan exists and is active
   const [plan] = await db
     .select()
     .from(pricingPlansTable)
-    .where(eq(pricingPlansTable.id, planId))
+    .where(and(eq(pricingPlansTable.id, planId), eq(pricingPlansTable.isActive, true)))
     .limit(1);
 
   if (!plan) {
-    res.status(404).json({ error: "Plan not found" });
+    res.status(404).json({ error: "Plan not found or inactive" });
     return;
   }
 
-  // Check for a duplicate pending request for this user + plan
-  const existing = await db
+  // Check for existing pending request by this user
+  const [existingPending] = await db
     .select({ id: paymentRequestsTable.id })
     .from(paymentRequestsTable)
-    .where(eq(paymentRequestsTable.userId, userId))
-    .limit(10);
+    .where(and(eq(paymentRequestsTable.userId, userId), eq(paymentRequestsTable.status, "pending")))
+    .limit(1);
 
-  const alreadyPending = existing.some(
-    (r) =>
-      (r as unknown as { status: string; planId: number }).status === "pending" &&
-      (r as unknown as { planId: number }).planId === planId
-  );
-
-  // Re-query with full row to properly check
-  const existingFull = await db
-    .select()
-    .from(paymentRequestsTable)
-    .where(eq(paymentRequestsTable.userId, userId));
-
-  const hasPending = existingFull.some(
-    (r) => r.status === "pending" && r.planId === planId
-  );
-
-  if (hasPending) {
-    res.status(409).json({ error: "You already have a pending payment request for this plan. Please wait for admin review." });
+  if (existingPending) {
+    res.status(409).json({ error: "You already have a pending payment request. Please wait for admin verification." });
     return;
   }
 
-  const [request] = await db
+  // Check duplicate trxId
+  const [dupTrx] = await db
+    .select({ id: paymentRequestsTable.id })
+    .from(paymentRequestsTable)
+    .where(eq(paymentRequestsTable.trxId, trxId))
+    .limit(1);
+
+  if (dupTrx) {
+    res.status(409).json({ error: "This transaction ID has already been submitted." });
+    return;
+  }
+
+  const [created] = await db
     .insert(paymentRequestsTable)
-    .values({
-      userId,
-      planId,
-      amount: plan.price,
-      paymentMethod,
-      senderNumber: senderNumber.trim(),
-      transactionId: transactionId.trim(),
-    })
+    .values({ userId, planId, paymentMethod, senderNumber, trxId })
     .returning();
 
-  res.status(201).json({
-    id: request.id,
-    status: request.status,
-    message: "Payment submitted. Your account will be upgraded once an admin verifies the transaction.",
-  });
-});
-
-// ── Admin: list payment requests (with user + plan info) ──────────────────────
-
-router.get("/admin/payments", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
-  const { usersTable, pricingPlansTable: plansTable } = await import("@workspace/db");
-  const alias = { user: usersTable, plan: plansTable };
-
-  const rows = await db
-    .select({
-      id: paymentRequestsTable.id,
-      amount: paymentRequestsTable.amount,
-      paymentMethod: paymentRequestsTable.paymentMethod,
-      senderNumber: paymentRequestsTable.senderNumber,
-      transactionId: paymentRequestsTable.transactionId,
-      status: paymentRequestsTable.status,
-      createdAt: paymentRequestsTable.createdAt,
-      reviewedAt: paymentRequestsTable.reviewedAt,
-      userId: paymentRequestsTable.userId,
-      planId: paymentRequestsTable.planId,
-      userEmail: alias.user.email,
-      userName: alias.user.name,
-      planName: alias.plan.planName,
-      planSlug: alias.plan.slug,
-    })
-    .from(paymentRequestsTable)
-    .leftJoin(alias.user, eq(alias.user.id, paymentRequestsTable.userId))
-    .leftJoin(alias.plan, eq(alias.plan.id, paymentRequestsTable.planId))
-    .orderBy(paymentRequestsTable.createdAt);
-
-  res.json(rows);
-});
-
-// ── Admin: approve a payment request ─────────────────────────────────────────
-
-router.post("/admin/payments/:id/approve", requireAuth, requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
-
-  const [request] = await db
-    .select()
-    .from(paymentRequestsTable)
-    .where(eq(paymentRequestsTable.id, id))
-    .limit(1);
-
-  if (!request) { res.status(404).json({ error: "Payment request not found" }); return; }
-  if (request.status !== "pending") {
-    res.status(409).json({ error: `Request is already ${request.status}` });
-    return;
-  }
-
-  const adminId = req.localUser!.id;
-
-  // Activate subscription on the user
-  const [plan] = await db
-    .select()
-    .from(pricingPlansTable)
-    .where(eq(pricingPlansTable.id, request.planId))
-    .limit(1);
-
-  if (!plan) { res.status(404).json({ error: "Plan no longer exists" }); return; }
-
-  const expiry = new Date();
-  expiry.setMonth(expiry.getMonth() + plan.durationInMonths);
-
-  const { usersTable } = await import("@workspace/db");
-  await db
-    .update(usersTable)
-    .set({ subscriptionPlan: plan.slug, subscriptionExpiry: expiry })
-    .where(eq(usersTable.id, request.userId));
-
-  const [updated] = await db
-    .update(paymentRequestsTable)
-    .set({ status: "approved", reviewedBy: adminId, reviewedAt: new Date() })
-    .where(eq(paymentRequestsTable.id, id))
-    .returning();
-
-  res.json(updated);
-});
-
-// ── Admin: reject a payment request ──────────────────────────────────────────
-
-router.post("/admin/payments/:id/reject", requireAuth, requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
-
-  const [request] = await db
-    .select()
-    .from(paymentRequestsTable)
-    .where(eq(paymentRequestsTable.id, id))
-    .limit(1);
-
-  if (!request) { res.status(404).json({ error: "Payment request not found" }); return; }
-  if (request.status !== "pending") {
-    res.status(409).json({ error: `Request is already ${request.status}` });
-    return;
-  }
-
-  const adminId = req.localUser!.id;
-  const [updated] = await db
-    .update(paymentRequestsTable)
-    .set({ status: "rejected", reviewedBy: adminId, reviewedAt: new Date() })
-    .where(eq(paymentRequestsTable.id, id))
-    .returning();
-
-  res.json(updated);
+  res.status(201).json({ id: created.id, status: created.status });
 });
 
 export default router;
