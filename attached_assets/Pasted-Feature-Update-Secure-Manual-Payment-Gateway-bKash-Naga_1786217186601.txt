@@ -1,0 +1,45 @@
+Feature Update: Secure Manual Payment Gateway (bKash/Nagad) & Verification System
+
+System Instruction Check: Please read the /docs folder. We need to replace the simulated payment on the /pricing page with a strict, manual verification flow suitable for mobile money (bKash/Nagad). Security is the top priority; users must not be able to bypass the payment wall.
+
+Please implement this step-by-step:
+
+1. Database Schema Updates (MongoDB):
+
+Update SystemSettings schema: Add fields for bkashNumber (String) and nagadNumber (String).
+
+Create a new PaymentRequest schema: userId (Reference), planId (Reference), paymentMethod (Enum: ['bKash', 'Nagad']), senderNumber (String), trxId (String, must be unique to prevent duplicate submissions), status (Enum: ['pending', 'approved', 'rejected'], default: 'pending'), and createdAt (Date).
+
+2. Public Checkout Flow (Frontend):
+
+When a user clicks "Subscribe" on a paid plan, open a Checkout Modal.
+
+Fetch and display the active bkashNumber and nagadNumber from the SystemSettings API so the user knows where to Send Money.
+
+Provide a form requiring: Payment Method (dropdown), Sender Number, and TrxID (Transaction ID).
+
+On submit, send this data to a new /api/payments/submit endpoint.
+
+If a user has a 'pending' request, disable the subscribe buttons and show a "Verification Pending" banner on their dashboard and pricing page.
+
+3. Secure Backend APIs:
+
+POST /api/payments/submit: Validates input, ensures the trxId doesn't already exist in the database, and creates a 'pending' PaymentRequest.
+
+POST /api/admin/payments/:id/approve: Strictly protected by isAdmin middleware. Updates the PaymentRequest to 'approved', then calculates and updates the associated User's subscriptionPlan and subscriptionExpiry date.
+
+POST /api/admin/payments/:id/reject: Protect via middleware. Marks the request as 'rejected'.
+
+4. Admin UI Expansion (/admin):
+
+Tab: Payment Settings: Update the existing Settings tab so the Admin can dynamically update the bkashNumber and nagadNumber.
+
+Tab: Verification Queue: Create a new table displaying all 'pending' PaymentRequest documents (showing User Email, Plan Requested, Method, Sender Number, TrxID).
+
+Add action buttons to "Approve" (green) or "Reject" (red) each request. Clicking Approve must trigger the secure backend API.
+
+5. Knowledge Base Update:
+
+Update docs/architecture.md with the new PaymentRequest schema and the manual verification flow.
+
+Update docs/memory.md indicating the secure manual payment gateway is live.
