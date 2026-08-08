@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/mobile/"
+title = "Expanse Tracker Mobile"
+description = "A mobile companion app for the Expanse Tracker. Lets users log, view, and delete expenses on the go. Supports all categories (Utilities, Bazar, One-Time) and expense types (recurring, one-time), and communicates with the shared Express API server."
+version = "1.0.0"
+id = "artifacts/expanse-tracker-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/mobile/" ]
+localPort = 19528
+
+[services.development]
+run = "pnpm --filter @workspace/expanse-tracker-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/expanse-tracker-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/expanse-tracker-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "19528"
+BASE_PATH = "/mobile/"
