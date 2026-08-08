@@ -237,8 +237,8 @@ export default function Pricing() {
 
       {/* Payment Modal */}
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-stone-100 dark:border-slate-700 p-8 w-full max-w-md">
             {/* Header */}
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-xl font-semibold text-stone-900">Complete your payment</h2>

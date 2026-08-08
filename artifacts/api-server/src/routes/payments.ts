@@ -89,13 +89,34 @@ router.post("/payments/submit", requireAuth, async (req, res): Promise<void> => 
   });
 });
 
-// ── Admin: list payment requests ──────────────────────────────────────────────
+// ── Admin: list payment requests (with user + plan info) ──────────────────────
 
 router.get("/admin/payments", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
+  const { usersTable, pricingPlansTable: plansTable } = await import("@workspace/db");
+  const alias = { user: usersTable, plan: plansTable };
+
   const rows = await db
-    .select()
+    .select({
+      id: paymentRequestsTable.id,
+      amount: paymentRequestsTable.amount,
+      paymentMethod: paymentRequestsTable.paymentMethod,
+      senderNumber: paymentRequestsTable.senderNumber,
+      transactionId: paymentRequestsTable.transactionId,
+      status: paymentRequestsTable.status,
+      createdAt: paymentRequestsTable.createdAt,
+      reviewedAt: paymentRequestsTable.reviewedAt,
+      userId: paymentRequestsTable.userId,
+      planId: paymentRequestsTable.planId,
+      userEmail: alias.user.email,
+      userName: alias.user.name,
+      planName: alias.plan.planName,
+      planSlug: alias.plan.slug,
+    })
     .from(paymentRequestsTable)
+    .leftJoin(alias.user, eq(alias.user.id, paymentRequestsTable.userId))
+    .leftJoin(alias.plan, eq(alias.plan.id, paymentRequestsTable.planId))
     .orderBy(paymentRequestsTable.createdAt);
+
   res.json(rows);
 });
 
