@@ -51,11 +51,12 @@
 - [x] Subscribe modal → `POST /api/subscription/upgrade` (no Bearer token — cookie auth)
 - [x] Unauthenticated users redirected to `/sign-in`
 
-### Admin Panel (`/admin`) — 4 Tabs
-- [x] **Users tab:** Stats cards (Total Users, Active Subscribers, Revenue ৳), full user table with suspend/unban + manual plan upgrade
+### Admin Panel (`/admin`) — 5 Tabs
+- [x] **Users tab:** Stats cards (Total Users, Active Subscribers, Revenue ৳), real-time search by name/email, status filter (All/Active/Suspended), plan filter, CSV export of filtered list, full user table with suspend/unban + manual plan upgrade
 - [x] **Pricing Manager:** List all plans, create/edit (name, slug, price, duration, features), toggle active, delete
 - [x] **Category Manager:** List all categories, create/edit (name, emoji, sort order), toggle active, delete
 - [x] **Global Settings:** Announcement banner text + enable toggle, allow-registrations toggle
+- [x] **Activity Logs:** Read-only chronological log of all admin actions (suspend, unban, upgrade); auto-refreshes every 30s
 
 ### CMS / Dynamic Configuration
 - [x] `categories` table — admin-managed, drives expense form dropdown + monthly summary zero-fill

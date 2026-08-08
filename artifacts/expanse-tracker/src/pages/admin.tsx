@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocalUser } from "@/hooks/use-local-user";
 import { useToast } from "@/hooks/use-toast";
 import {
+  Activity,
   ArrowLeft,
   Crown,
+  Download,
   MoreHorizontal,
   Pencil,
   Plus,
+  Search,
   Shield,
   ToggleLeft,
   ToggleRight,
@@ -47,6 +50,9 @@ interface Settings {
   id: number; announcementText: string;
   isAnnouncementActive: boolean; allowRegistrations: boolean;
 }
+interface AdminLog {
+  id: number; adminId: number; actionType: string; description: string; createdAt: string;
+}
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -56,13 +62,19 @@ const planBadge: Record<string, string> = {
   yearly: "bg-amber-100 text-amber-700",
 };
 const statusBadge = { active: "bg-emerald-100 text-emerald-700", suspended: "bg-red-100 text-red-600" };
+const logBadge: Record<string, string> = {
+  suspend_user: "bg-red-100 text-red-600",
+  unban_user: "bg-emerald-100 text-emerald-700",
+  upgrade_user: "bg-amber-100 text-amber-700",
+};
 
-type AdminTab = "users" | "pricing" | "categories" | "settings";
-const TABS: { key: AdminTab; label: string }[] = [
-  { key: "users", label: "Users" },
-  { key: "pricing", label: "Pricing Manager" },
-  { key: "categories", label: "Category Manager" },
-  { key: "settings", label: "Global Settings" },
+type AdminTab = "users" | "pricing" | "categories" | "settings" | "logs";
+const TABS: { key: AdminTab; label: string; icon: typeof Users }[] = [
+  { key: "users",      label: "Users",            icon: Users },
+  { key: "pricing",    label: "Pricing Manager",  icon: Crown },
+  { key: "categories", label: "Category Manager", icon: Pencil },
+  { key: "settings",   label: "Global Settings",  icon: Shield },
+  { key: "logs",       label: "Activity Logs",    icon: Activity },
 ];
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -91,18 +103,19 @@ export default function Admin() {
 
       {/* Tabs */}
       <div className="bg-white border-b border-stone-200 sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-6 flex">
+        <div className="max-w-6xl mx-auto px-6 flex overflow-x-auto">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={cn(
-                "px-5 py-3.5 text-sm font-medium border-b-2 transition-colors",
+                "flex items-center gap-1.5 px-5 py-3.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
                 tab === t.key
                   ? "border-stone-900 text-stone-900"
                   : "border-transparent text-stone-400 hover:text-stone-700",
               )}
             >
+              <t.icon className="w-3.5 h-3.5" />
               {t.label}
             </button>
           ))}
@@ -110,23 +123,57 @@ export default function Admin() {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
-        {tab === "users" && <UsersTab toast={toast} qc={qc} />}
-        {tab === "pricing" && <PricingTab toast={toast} qc={qc} />}
+        {tab === "users"      && <UsersTab toast={toast} qc={qc} />}
+        {tab === "pricing"    && <PricingTab toast={toast} qc={qc} />}
         {tab === "categories" && <CategoriesTab toast={toast} qc={qc} />}
-        {tab === "settings" && <SettingsTab toast={toast} qc={qc} />}
+        {tab === "settings"   && <SettingsTab toast={toast} qc={qc} />}
+        {tab === "logs"       && <ActivityLogsTab />}
       </div>
     </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TAB: Users
+// TAB: Users (with search, filters, CSV export)
 // ══════════════════════════════════════════════════════════════════════════════
+
+function downloadCSV(users: AdminUser[]) {
+  const headers = ["ID", "Name", "Email", "Type", "Role", "Plan", "Status", "Joined"];
+  const escape = (v: string | number) =>
+    typeof v === "string" && (v.includes(",") || v.includes('"') || v.includes("\n"))
+      ? `"${v.replace(/"/g, '""')}"`
+      : String(v);
+  const rows = users.map((u) => [
+    u.id,
+    u.name,
+    u.email,
+    u.accountType,
+    u.role,
+    u.subscriptionPlan,
+    u.status,
+    new Date(u.createdAt).toLocaleDateString(),
+  ].map(escape));
+  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `users-${new Date().toISOString().split("T")[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function UsersTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; qc: ReturnType<typeof useQueryClient> }) {
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [upgradeModal, setUpgradeModal] = useState<AdminUser | null>(null);
   const [upgradePlan, setUpgradePlan] = useState<"monthly" | "yearly">("monthly");
+
+  // Search & filter state
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
+  const [planFilter, setPlanFilter] = useState<string>("all");
 
   const { data: stats, isLoading: statsLoading } = useQuery<Stats>({
     queryKey: ["admin-stats"],
@@ -142,7 +189,13 @@ function UsersTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; 
       const r = await authFetch(`/api/admin/user/${id}/toggle-status`, { method: "POST" });
       if (!r.ok) throw new Error((await r.json()).error);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-users"] }); qc.invalidateQueries({ queryKey: ["admin-stats"] }); toast({ title: "Status updated" }); setOpenMenu(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      qc.invalidateQueries({ queryKey: ["admin-stats"] });
+      qc.invalidateQueries({ queryKey: ["admin-logs"] });
+      toast({ title: "Status updated" });
+      setOpenMenu(null);
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -151,9 +204,33 @@ function UsersTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; 
       const r = await authFetch(`/api/admin/user/${id}/upgrade`, { method: "POST", body: JSON.stringify({ plan }) });
       if (!r.ok) throw new Error((await r.json()).error);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-users"] }); qc.invalidateQueries({ queryKey: ["admin-stats"] }); toast({ title: "Plan upgraded" }); setUpgradeModal(null); setOpenMenu(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      qc.invalidateQueries({ queryKey: ["admin-stats"] });
+      qc.invalidateQueries({ queryKey: ["admin-logs"] });
+      toast({ title: "Plan upgraded" });
+      setUpgradeModal(null);
+      setOpenMenu(null);
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  // Unique plan slugs from loaded users (for the filter dropdown)
+  const availablePlans = useMemo(() => {
+    const slugs = new Set(users.map((u) => u.subscriptionPlan));
+    return Array.from(slugs).sort();
+  }, [users]);
+
+  // Client-side filtered user list
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return users.filter((u) => {
+      const matchSearch = !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+      const matchStatus = statusFilter === "all" || u.status === statusFilter;
+      const matchPlan = planFilter === "all" || u.subscriptionPlan === planFilter;
+      return matchSearch && matchStatus && matchPlan;
+    });
+  }, [users, search, statusFilter, planFilter]);
 
   const statCards = [
     { label: "Total Users", value: statsLoading ? "—" : stats?.totalUsers ?? 0, icon: Users, color: "text-blue-500", bg: "bg-blue-50" },
@@ -163,43 +240,117 @@ function UsersTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; 
 
   return (
     <div className="space-y-6">
+      {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         {statCards.map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 flex items-center gap-4">
-            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", bg)}><Icon className={cn("w-6 h-6", color)} /></div>
-            <div><p className="text-xs font-medium text-stone-400 uppercase tracking-wide">{label}</p><p className="text-2xl font-bold text-stone-900 mt-0.5">{String(value)}</p></div>
+            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", bg)}>
+              <Icon className={cn("w-6 h-6", color)} />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-stone-400 uppercase tracking-wide">{label}</p>
+              <p className="text-2xl font-bold text-stone-900 mt-0.5">{String(value)}</p>
+            </div>
           </div>
         ))}
       </div>
 
+      {/* User Management table */}
       <div className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-stone-100">
-          <h2 className="font-semibold text-stone-900">User Management</h2>
-          <p className="text-xs text-stone-400 mt-0.5">{users.length} registered users</p>
+        {/* Table header with search / filters / CSV */}
+        <div className="px-6 py-4 border-b border-stone-100 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="font-semibold text-stone-900">User Management</h2>
+              <p className="text-xs text-stone-400 mt-0.5">
+                {filteredUsers.length === users.length
+                  ? `${users.length} registered users`
+                  : `${filteredUsers.length} of ${users.length} users`}
+              </p>
+            </div>
+            <button
+              onClick={() => downloadCSV(filteredUsers)}
+              disabled={filteredUsers.length === 0}
+              className="flex items-center gap-2 text-sm border border-stone-200 text-stone-700 px-3 py-2 rounded-lg hover:bg-stone-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              Download CSV
+            </button>
+          </div>
+
+          {/* Search + filters row */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search by name or email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-[#F5F0E8]"
+              />
+            </div>
+
+            {/* Status filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              className="text-sm border border-stone-200 rounded-lg px-3 py-2 bg-[#F5F0E8] text-stone-700 focus:outline-none focus:border-stone-400"
+            >
+              <option value="all">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+            </select>
+
+            {/* Plan filter */}
+            <select
+              value={planFilter}
+              onChange={(e) => setPlanFilter(e.target.value)}
+              className="text-sm border border-stone-200 rounded-lg px-3 py-2 bg-[#F5F0E8] text-stone-700 focus:outline-none focus:border-stone-400"
+            >
+              <option value="all">All Plans</option>
+              {availablePlans.map((slug) => (
+                <option key={slug} value={slug}>
+                  {slug.charAt(0).toUpperCase() + slug.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+
         {usersLoading ? (
           <div className="py-16 text-center text-stone-400 text-sm">Loading…</div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="py-16 text-center text-stone-400 text-sm">
+            {users.length === 0 ? "No users yet." : "No users match your filters."}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-xs font-semibold text-stone-400 uppercase tracking-wide border-b border-stone-100 bg-stone-50/60">
-                <th className="text-left px-6 py-3">Name</th>
-                <th className="text-left px-4 py-3">Email</th>
-                <th className="text-left px-4 py-3">Type</th>
-                <th className="text-left px-4 py-3">Plan</th>
-                <th className="text-left px-4 py-3">Status</th>
-                <th className="text-left px-4 py-3">Joined</th>
-                <th className="px-4 py-3" />
-              </tr></thead>
+              <thead>
+                <tr className="text-xs font-semibold text-stone-400 uppercase tracking-wide border-b border-stone-100 bg-stone-50/60">
+                  <th className="text-left px-6 py-3">Name</th>
+                  <th className="text-left px-4 py-3">Email</th>
+                  <th className="text-left px-4 py-3">Type</th>
+                  <th className="text-left px-4 py-3">Plan</th>
+                  <th className="text-left px-4 py-3">Status</th>
+                  <th className="text-left px-4 py-3">Joined</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
               <tbody>
-                {users.map((u) => (
+                {filteredUsers.map((u) => (
                   <tr key={u.id} className="border-b border-stone-50 hover:bg-stone-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-stone-900 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                           {u.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
                         </div>
-                        <div><p className="font-medium text-stone-900">{u.name}</p>{u.role === "admin" && <p className="text-xs text-amber-600 font-medium">Admin</p>}</div>
+                        <div>
+                          <p className="font-medium text-stone-900">{u.name}</p>
+                          {u.role === "admin" && <p className="text-xs text-amber-600 font-medium">Admin</p>}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-4 text-stone-500">{u.email}</td>
@@ -208,20 +359,45 @@ function UsersTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; 
                       <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", planBadge[u.subscriptionPlan] ?? "bg-stone-100 text-stone-500")}>
                         {u.subscriptionPlan.charAt(0).toUpperCase() + u.subscriptionPlan.slice(1)}
                       </span>
-                      {u.subscriptionExpiry && <p className="text-xs text-stone-400 mt-0.5">until {new Date(u.subscriptionExpiry).toLocaleDateString()}</p>}
+                      {u.subscriptionExpiry && (
+                        <p className="text-xs text-stone-400 mt-0.5">
+                          until {new Date(u.subscriptionExpiry).toLocaleDateString()}
+                        </p>
+                      )}
                     </td>
-                    <td className="px-4 py-4"><span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", statusBadge[u.status as keyof typeof statusBadge] ?? statusBadge.active)}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></td>
-                    <td className="px-4 py-4 text-stone-400 text-xs">{new Date(u.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-4">
+                      <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", statusBadge[u.status as keyof typeof statusBadge] ?? statusBadge.active)}>
+                        {u.status.charAt(0).toUpperCase() + u.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-stone-400 text-xs">
+                      {new Date(u.createdAt).toLocaleDateString()}
+                    </td>
                     <td className="px-4 py-4 relative">
                       {u.role !== "admin" && (
                         <div className="relative">
-                          <button onClick={() => setOpenMenu(openMenu === u.id ? null : u.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400 transition-colors"><MoreHorizontal className="w-4 h-4" /></button>
+                          <button
+                            onClick={() => setOpenMenu(openMenu === u.id ? null : u.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400 transition-colors"
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
                           {openMenu === u.id && (
                             <div className="absolute right-0 top-10 z-20 bg-white rounded-xl shadow-xl border border-stone-100 py-1 w-44">
-                              <button onClick={() => toggleStatus.mutate(u.id)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 transition-colors">
-                                {u.status === "active" ? <span className="text-red-600">Suspend user</span> : <span className="text-emerald-600">Unban user</span>}
+                              <button
+                                onClick={() => toggleStatus.mutate(u.id)}
+                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 transition-colors"
+                              >
+                                {u.status === "active"
+                                  ? <span className="text-red-600">Suspend user</span>
+                                  : <span className="text-emerald-600">Unban user</span>}
                               </button>
-                              <button onClick={() => { setUpgradeModal(u); setOpenMenu(null); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 text-stone-700 transition-colors">Manually upgrade</button>
+                              <button
+                                onClick={() => { setUpgradeModal(u); setOpenMenu(null); }}
+                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 text-stone-700 transition-colors"
+                              >
+                                Manually upgrade
+                              </button>
                             </div>
                           )}
                         </div>
@@ -244,14 +420,22 @@ function UsersTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; 
             <p className="text-stone-500 text-sm mb-6">Upgrading <strong>{upgradeModal.name}</strong>'s plan.</p>
             <div className="flex rounded-lg border border-stone-200 overflow-hidden mb-6">
               {(["monthly", "yearly"] as const).map((p) => (
-                <button key={p} onClick={() => setUpgradePlan(p)} className={cn("flex-1 py-2.5 text-sm font-medium transition-colors", upgradePlan === p ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-50")}>
+                <button
+                  key={p}
+                  onClick={() => setUpgradePlan(p)}
+                  className={cn("flex-1 py-2.5 text-sm font-medium transition-colors", upgradePlan === p ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-50")}
+                >
                   {p === "monthly" ? "Monthly · ৳100" : "Yearly · ৳500"}
                 </button>
               ))}
             </div>
             <div className="flex gap-3">
               <button onClick={() => setUpgradeModal(null)} className="flex-1 py-2.5 rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 text-sm font-medium transition-colors">Cancel</button>
-              <button onClick={() => upgradeUser.mutate({ id: upgradeModal.id, plan: upgradePlan })} disabled={upgradeUser.isPending} className="flex-1 py-2.5 rounded-lg bg-stone-900 text-white hover:bg-stone-800 text-sm font-medium transition-colors disabled:opacity-60">
+              <button
+                onClick={() => upgradeUser.mutate({ id: upgradeModal.id, plan: upgradePlan })}
+                disabled={upgradeUser.isPending}
+                className="flex-1 py-2.5 rounded-lg bg-stone-900 text-white hover:bg-stone-800 text-sm font-medium transition-colors disabled:opacity-60"
+              >
                 {upgradeUser.isPending ? "Upgrading…" : "Confirm"}
               </button>
             </div>
@@ -582,6 +766,74 @@ function SettingsTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"
       >
         {save.isPending ? "Saving…" : "Save Settings"}
       </button>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: Activity Logs
+// ══════════════════════════════════════════════════════════════════════════════
+
+const ACTION_LABELS: Record<string, string> = {
+  suspend_user: "Suspend User",
+  unban_user: "Unban User",
+  upgrade_user: "Upgrade User",
+};
+
+function ActivityLogsTab() {
+  const { data: logs = [], isLoading } = useQuery<AdminLog[]>({
+    queryKey: ["admin-logs"],
+    queryFn: async () => { const r = await authFetch("/api/admin/logs"); return r.json(); },
+    refetchInterval: 30_000,
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold text-stone-900">Activity Logs</h2>
+          <p className="text-xs text-stone-400 mt-0.5">{logs.length} recorded action{logs.length !== 1 ? "s" : ""} · auto-refreshes every 30s</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+        {isLoading ? (
+          <div className="py-16 text-center text-stone-400 text-sm">Loading…</div>
+        ) : logs.length === 0 ? (
+          <div className="py-20 text-center space-y-2">
+            <Activity className="w-8 h-8 text-stone-200 mx-auto" />
+            <p className="text-stone-400 text-sm">No admin actions logged yet.</p>
+            <p className="text-stone-300 text-xs">Suspending, unbanning, or upgrading a user will appear here.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs font-semibold text-stone-400 uppercase tracking-wide border-b border-stone-100 bg-stone-50/60">
+                  <th className="text-left px-6 py-3">Action</th>
+                  <th className="text-left px-4 py-3">Description</th>
+                  <th className="text-right px-6 py-3">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log) => (
+                  <tr key={log.id} className="border-b border-stone-50 hover:bg-stone-50/50 transition-colors">
+                    <td className="px-6 py-3.5">
+                      <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap", logBadge[log.actionType] ?? "bg-stone-100 text-stone-500")}>
+                        {ACTION_LABELS[log.actionType] ?? log.actionType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-stone-600">{log.description}</td>
+                    <td className="px-6 py-3.5 text-stone-400 text-xs text-right whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
