@@ -107,6 +107,7 @@ function ExpenseForm({
     amount: initial?.amount ?? 0,
     category: initial?.category ?? availableCategories[0] ?? "",
     date: initial ? dateOnly(initial.date) : new Date().toISOString().slice(0, 10),
+    type: (initial?.type as ExpenseInput["type"]) ?? "one-time",
     note: initial?.note ?? "",
   });
   const set = (key: keyof ExpenseInput, value: string | number) =>
@@ -199,6 +200,24 @@ function ExpenseForm({
               }`}
             >
               {category}
+            </button>
+          ))}
+        </div>
+      </Field>
+      <Field label="Type">
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          {(["one-time", "recurring"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => set("type", t)}
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                form.type === t
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {t === "one-time" ? "One-time" : "Recurring"}
             </button>
           ))}
         </div>

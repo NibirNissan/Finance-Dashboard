@@ -10,6 +10,8 @@ export * from './categoryTotal';
 export * from './errorResponse';
 export * from './expense';
 export * from './expenseInput';
+export * from './expenseInputType';
+export * from './expenseType';
 export * from './getExpenseHistoryParams';
 export * from './getMonthlySummaryParams';
 export * from './healthStatus';

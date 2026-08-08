@@ -23,6 +23,7 @@ export interface Expense {
   amount: number;
   category: string;
   date: string;
+  type: ExpenseType;
   /**
      * @maxLength 500
      * @nullable
@@ -49,6 +50,7 @@ export interface ExpenseInput {
   amount: number;
   category: string;
   date: string;
+  type: ExpenseInputType;
   /**
      * @maxLength 500
      * @nullable
