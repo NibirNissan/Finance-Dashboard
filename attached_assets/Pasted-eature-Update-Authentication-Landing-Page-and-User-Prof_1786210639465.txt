@@ -1,0 +1,45 @@
+eature Update: Authentication, Landing Page, and User Profiles
+
+System Instruction Check: Please read the /docs folder before proceeding. We are expanding the architecture to include user authentication and public/private routing.
+
+Please implement the following features step-by-step:
+
+1. Database Schema & Backend Updates (Node/Express/MongoDB):
+
+Create a User schema with the following fields: name, email, password (hashed), phone (optional), and accountType (Enum: ['Single Person', 'Family'], default: 'Single Person').
+
+Update the Expense schema to include a userId reference so expenses are tied to the logged-in user.
+
+Create basic authentication API endpoints: /api/auth/register, /api/auth/login, and /api/user/profile (to get/update user details).
+
+2. Public Landing & Auth Page (Frontend - Mobile Responsive):
+
+Create a new landing page at the root route (/). The top half (Hero section) should feature a clean, modern Login / Sign Up card.
+
+Auth Card UI: Include a toggle to switch between Sign In and Sign Up.
+
+Sign Up fields: Name, Email, Password, and a nice UI toggle or radio buttons for Account Type ("Single Person" vs "Family").
+
+OAuth Placeholder: Below the standard email login, add a "Continue with Google" button with a Google icon. Make it a dummy button for now that just shows an alert ("Google OAuth coming soon").
+
+Below the Fold (Scroll): Add a descriptive section about "Expanse Tracker".
+
+Add a simple auto-playing CSS/React slideshow component to showcase future app screenshots.
+
+Add a visual "How it Works" diagram section using Tailwind UI elements or simple CSS shapes (e.g., three connected steps: Log Expense ➔ Categorize ➔ Generate Monthly PDF).
+
+3. Private Routing & In-App Profile:
+
+Set up React Router. The Landing/Auth page is public. The Dashboard (current main page) and a new Profile page should be protected (requires login).
+
+Create a new /profile page accessible from the dashboard header or a mobile menu.
+
+Profile UI: Provide a clean form for the user to view and edit their Name, Email, Phone Number, and view their Account Type. Include a "Log Out" button.
+
+4. Knowledge Base Update:
+
+Once everything is working, update docs/architecture.md with the new User schema and routing structure.
+
+Update docs/memory.md to reflect that Authentication and the Landing Page are now active, and note that Google OAuth is pending.
+
+Please execute this step-by-step and keep the dark mode and premium UI styling consistent on the new landing and profile pages. Let me know when the UI is ready to test.

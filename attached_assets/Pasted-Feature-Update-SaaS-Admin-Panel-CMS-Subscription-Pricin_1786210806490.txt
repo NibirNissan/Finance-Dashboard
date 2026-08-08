@@ -1,0 +1,59 @@
+Feature Update: SaaS Admin Panel (CMS) & Subscription Pricing
+
+System Instruction Check: Please read the /docs folder. We are now upgrading the app into a full SaaS by adding an Admin Panel, Subscription plans, and strict Role-Based Access Control (RBAC).
+
+Please implement this step-by-step:
+
+1. Database Schema Updates (Security & Subscriptions):
+
+Update the User schema: Add a role field (Enum: ['user', 'admin'], default: 'user').
+
+Add subscription tracking to the User schema: subscriptionPlan (Enum: ['free', 'monthly', 'yearly'], default: 'free') and subscriptionExpiry (Date).
+
+Add a status field (Enum: ['active', 'suspended'], default: 'active') to handle user bans.
+
+2. Secure Backend & Middleware:
+
+Create an isAdmin middleware. Apply this to all /api/admin/* routes so only users with the 'admin' role can access them.
+
+Create Admin APIs:
+
+/api/admin/stats (Returns total users count, active subscribers count, and estimated total revenue).
+
+/api/admin/users (Returns a list of all users).
+
+/api/admin/user/:id/toggle-status (Allows admin to suspend/activate a user).
+
+3. Pricing & Upgrade Logic:
+
+Implement the pricing structure: 1 Month = 100 BDT (৳), 12 Months = 500 BDT (৳).
+
+Create a /api/subscription/upgrade endpoint. For now, use a dummy payment success logic that updates the user's subscriptionPlan and sets the subscriptionExpiry date accordingly.
+
+4. Frontend Admin Dashboard (/admin):
+
+Create a protected /admin route (strictly for admins). Keep the dark/premium UI consistent.
+
+Top Section: Display 3 analytic cards: "Total Users", "Active Subscribers", and "Total Revenue (৳)".
+
+User Management Table: A clean data table listing all registered users (Name, Email, Account Type, Plan, Status). Add an action menu (three dots) to each row allowing the admin to "Suspend/Unban" the user or "Manually Upgrade" their plan.
+
+5. Frontend Pricing Page (/pricing):
+
+Create a beautiful pricing page accessible from the main landing page.
+
+Show three tiers:
+
+Basic: Free (Limited features).
+
+Monthly: 100 ৳ / month.
+
+Yearly: 500 ৳ / year (Highlight this as "Best Value").
+
+Add a "Subscribe" button on the paid tiers that opens a simple modal to simulate a payment, then updates the user's account upon success.
+
+6. Knowledge Base Update:
+
+Update docs/architecture.md with the new User schema fields and Admin routes.
+
+Update docs/memory.md reflecting that the CMS and Pricing Engine are live.

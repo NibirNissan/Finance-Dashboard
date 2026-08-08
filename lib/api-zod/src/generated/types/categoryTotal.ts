@@ -5,9 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { CategoryTotalCategory } from './categoryTotalCategory';
 
 export interface CategoryTotal {
-  category: CategoryTotalCategory;
+  category: string;
   total: number;
 }

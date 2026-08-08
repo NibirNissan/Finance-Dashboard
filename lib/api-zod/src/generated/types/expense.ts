@@ -5,14 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { ExpenseCategory } from './expenseCategory';
 import type { ExpenseType } from './expenseType';
 
 export interface Expense {
   id: number;
   title: string;
   amount: number;
-  category: ExpenseCategory;
+  category: string;
   date: Date;
   type: ExpenseType;
   createdAt: Date;

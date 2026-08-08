@@ -165,7 +165,6 @@ components:
           format: double
         category:
           type: string
-          enum: [Utilities, Bazar, One-Time]
         date:
           type: string
           format: date
@@ -189,7 +188,6 @@ components:
           exclusiveMinimum: 0
         category:
           type: string
-          enum: [Utilities, Bazar, One-Time]
         date:
           type: string
           format: date
@@ -202,7 +200,6 @@ components:
       properties:
         category:
           type: string
-          enum: [Utilities, Bazar, One-Time]
         total:
           type: number
           format: double

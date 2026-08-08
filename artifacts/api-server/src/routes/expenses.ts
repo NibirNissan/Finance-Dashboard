@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
-import { db, expensesTable } from "@workspace/db";
+import { and, asc, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { db, expensesTable, categoriesTable } from "@workspace/db";
 import {
   CreateExpenseBody,
   CreateExpenseResponse,
@@ -12,9 +12,9 @@ import {
   UpdateExpenseParams,
   UpdateExpenseResponse,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
-const categories = ["Utilities", "Bazar", "One-Time"] as const;
 
 function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
@@ -30,16 +30,18 @@ function monthBounds(month: string): { start: string; end: string } {
   };
 }
 
-router.get("/expenses", async (_req, res): Promise<void> => {
+router.get("/expenses", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.localUser!.id;
   const expenses = await db
     .select()
     .from(expensesTable)
+    .where(or(eq(expensesTable.userId, userId), isNull(expensesTable.userId)))
     .orderBy(desc(expensesTable.date), desc(expensesTable.createdAt));
 
   res.json(ListExpensesResponse.parse(expenses));
 });
 
-router.post("/expenses", async (req, res): Promise<void> => {
+router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateExpenseBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -50,6 +52,7 @@ router.post("/expenses", async (req, res): Promise<void> => {
     .insert(expensesTable)
     .values({
       ...parsed.data,
+      userId: req.localUser!.id,
       date: parsed.data.date.toISOString().slice(0, 10),
     })
     .returning();
@@ -57,7 +60,7 @@ router.post("/expenses", async (req, res): Promise<void> => {
   res.status(201).json(CreateExpenseResponse.parse(expense));
 });
 
-router.patch("/expenses/:id", async (req, res): Promise<void> => {
+router.patch("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
   const params = UpdateExpenseParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -87,7 +90,7 @@ router.patch("/expenses/:id", async (req, res): Promise<void> => {
   res.json(UpdateExpenseResponse.parse(expense));
 });
 
-router.delete("/expenses/:id", async (req, res): Promise<void> => {
+router.delete("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
   const params = DeleteExpenseParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -96,7 +99,12 @@ router.delete("/expenses/:id", async (req, res): Promise<void> => {
 
   const [expense] = await db
     .delete(expensesTable)
-    .where(eq(expensesTable.id, params.data.id))
+    .where(
+      and(
+        eq(expensesTable.id, params.data.id),
+        eq(expensesTable.userId, req.localUser!.id),
+      ),
+    )
     .returning({ id: expensesTable.id });
 
   if (!expense) {
@@ -107,52 +115,75 @@ router.delete("/expenses/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.get("/expenses/summary/monthly", async (req, res): Promise<void> => {
-  const parsedParams = GetMonthlySummaryQueryParams.safeParse(req.query);
-  if (!parsedParams.success) {
-    res.status(400).json({ error: parsedParams.error.message });
-    return;
-  }
+router.get(
+  "/expenses/summary/monthly",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const parsedParams = GetMonthlySummaryQueryParams.safeParse(req.query);
+    if (!parsedParams.success) {
+      res.status(400).json({ error: parsedParams.error.message });
+      return;
+    }
 
-  const month = parsedParams.data.month ?? currentMonth();
-  const { start, end } = monthBounds(month);
-  const where = and(gte(expensesTable.date, start), lt(expensesTable.date, end));
+    const userId = req.localUser!.id;
+    const month = parsedParams.data.month ?? currentMonth();
+    const { start, end } = monthBounds(month);
+    const where = and(
+      or(eq(expensesTable.userId, userId), isNull(expensesTable.userId)),
+      gte(expensesTable.date, start),
+      lt(expensesTable.date, end),
+    );
 
-  const [totals] = await db
-    .select({
-      total: sql<number>`coalesce(sum(${expensesTable.amount}), 0)`,
-      transactionCount: sql<number>`count(*)`,
-      recurringTotal: sql<number>`coalesce(sum(case when ${expensesTable.type} = 'recurring' then ${expensesTable.amount} else 0 end), 0)`,
-      oneTimeTotal: sql<number>`coalesce(sum(case when ${expensesTable.type} = 'one-time' then ${expensesTable.amount} else 0 end), 0)`,
-    })
-    .from(expensesTable)
-    .where(where);
+    const [totals] = await db
+      .select({
+        total: sql<number>`coalesce(sum(${expensesTable.amount}), 0)`,
+        transactionCount: sql<number>`count(*)`,
+        recurringTotal: sql<number>`coalesce(sum(case when ${expensesTable.type} = 'recurring' then ${expensesTable.amount} else 0 end), 0)`,
+        oneTimeTotal: sql<number>`coalesce(sum(case when ${expensesTable.type} = 'one-time' then ${expensesTable.amount} else 0 end), 0)`,
+      })
+      .from(expensesTable)
+      .where(where);
 
-  const categoryRows = await db
-    .select({
-      category: expensesTable.category,
-      total: sql<number>`coalesce(sum(${expensesTable.amount}), 0)`,
-    })
-    .from(expensesTable)
-    .where(where)
-    .groupBy(expensesTable.category)
-    .orderBy(asc(expensesTable.category));
+    const categoryRows = await db
+      .select({
+        category: expensesTable.category,
+        total: sql<number>`coalesce(sum(${expensesTable.amount}), 0)`,
+      })
+      .from(expensesTable)
+      .where(where)
+      .groupBy(expensesTable.category)
+      .orderBy(asc(expensesTable.category));
 
-  const byCategory = categories.map((category) => ({
-    category,
-    total: Number(categoryRows.find((row) => row.category === category)?.total ?? 0),
-  }));
+    // Fetch active categories for zero-filling
+    const activeCategories = await db
+      .select({ name: categoriesTable.name })
+      .from(categoriesTable)
+      .where(eq(categoriesTable.isActive, true))
+      .orderBy(asc(categoriesTable.sortOrder), asc(categoriesTable.name));
 
-  res.json(
-    GetMonthlySummaryResponse.parse({
-      month,
-      total: Number(totals?.total ?? 0),
-      transactionCount: Number(totals?.transactionCount ?? 0),
-      recurringTotal: Number(totals?.recurringTotal ?? 0),
-      oneTimeTotal: Number(totals?.oneTimeTotal ?? 0),
-      byCategory,
-    }),
-  );
-});
+    const knownNames = activeCategories.map((c) => c.name);
+    // Include any categories in expenses that may not be in the categories table
+    const extraNames = categoryRows
+      .map((r) => r.category)
+      .filter((c) => !knownNames.includes(c));
+    const allNames = [...knownNames, ...extraNames];
+
+    const byCategory = allNames.map((category) => ({
+      category,
+      total: Number(categoryRows.find((row) => row.category === category)?.total ?? 0),
+    }));
+
+    res.json(
+      GetMonthlySummaryResponse.parse({
+        month,
+        total: Number(totals?.total ?? 0),
+        transactionCount: Number(totals?.transactionCount ?? 0),
+        recurringTotal: Number(totals?.recurringTotal ?? 0),
+        oneTimeTotal: Number(totals?.oneTimeTotal ?? 0),
+        byCategory,
+      }),
+    );
+  },
+);
 
 export default router;

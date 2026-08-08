@@ -1,1 +1,2 @@
 - [Date-only API values](date-only-api-values.md) — normalize ISO timestamps before formatting calendar dates or filling date inputs.
+- [Clerk auth migration](clerk-auth-migration.md) — Replit-managed Clerk replaced custom JWT; session cookies for web, `req.localUser` in routes, `useLocalUser()` hook in frontend.

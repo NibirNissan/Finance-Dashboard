@@ -9,15 +9,6 @@ export interface HealthStatus {
   status: string;
 }
 
-export type ExpenseCategory = typeof ExpenseCategory[keyof typeof ExpenseCategory];
-
-
-export const ExpenseCategory = {
-  Utilities: 'Utilities',
-  Bazar: 'Bazar',
-  'One-Time': 'One-Time',
-} as const;
-
 export type ExpenseType = typeof ExpenseType[keyof typeof ExpenseType];
 
 
@@ -30,20 +21,11 @@ export interface Expense {
   id: number;
   title: string;
   amount: number;
-  category: ExpenseCategory;
+  category: string;
   date: string;
   type: ExpenseType;
   createdAt: string;
 }
-
-export type ExpenseInputCategory = typeof ExpenseInputCategory[keyof typeof ExpenseInputCategory];
-
-
-export const ExpenseInputCategory = {
-  Utilities: 'Utilities',
-  Bazar: 'Bazar',
-  'One-Time': 'One-Time',
-} as const;
 
 export type ExpenseInputType = typeof ExpenseInputType[keyof typeof ExpenseInputType];
 
@@ -61,22 +43,13 @@ export interface ExpenseInput {
   title: string;
   /** @exclusiveMinimum 0 */
   amount: number;
-  category: ExpenseInputCategory;
+  category: string;
   date: string;
   type: ExpenseInputType;
 }
 
-export type CategoryTotalCategory = typeof CategoryTotalCategory[keyof typeof CategoryTotalCategory];
-
-
-export const CategoryTotalCategory = {
-  Utilities: 'Utilities',
-  Bazar: 'Bazar',
-  'One-Time': 'One-Time',
-} as const;
-
 export interface CategoryTotal {
-  category: CategoryTotalCategory;
+  category: string;
   total: number;
 }
 

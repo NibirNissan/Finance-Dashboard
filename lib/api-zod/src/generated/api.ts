@@ -24,7 +24,7 @@ export const ListExpensesResponseItem = zod.object({
   "id": zod.number(),
   "title": zod.string(),
   "amount": zod.number(),
-  "category": zod.enum(['Utilities', 'Bazar', 'One-Time']),
+  "category": zod.string(),
   "date": zod.coerce.date(),
   "type": zod.enum(['recurring', 'one-time']),
   "createdAt": zod.coerce.date()
@@ -44,7 +44,7 @@ export const createExpenseBodyAmountExclusiveMin = 0;
 export const CreateExpenseBody = zod.object({
   "title": zod.string().min(1).max(createExpenseBodyTitleMax),
   "amount": zod.number().gt(createExpenseBodyAmountExclusiveMin),
-  "category": zod.enum(['Utilities', 'Bazar', 'One-Time']),
+  "category": zod.string(),
   "date": zod.coerce.date(),
   "type": zod.enum(['recurring', 'one-time'])
 })
@@ -53,7 +53,7 @@ export const CreateExpenseResponse = zod.object({
   "id": zod.number(),
   "title": zod.string(),
   "amount": zod.number(),
-  "category": zod.enum(['Utilities', 'Bazar', 'One-Time']),
+  "category": zod.string(),
   "date": zod.coerce.date(),
   "type": zod.enum(['recurring', 'one-time']),
   "createdAt": zod.coerce.date()
@@ -79,7 +79,7 @@ export const updateExpenseBodyAmountExclusiveMin = 0;
 export const UpdateExpenseBody = zod.object({
   "title": zod.string().min(1).max(updateExpenseBodyTitleMax),
   "amount": zod.number().gt(updateExpenseBodyAmountExclusiveMin),
-  "category": zod.enum(['Utilities', 'Bazar', 'One-Time']),
+  "category": zod.string(),
   "date": zod.coerce.date(),
   "type": zod.enum(['recurring', 'one-time'])
 })
@@ -88,7 +88,7 @@ export const UpdateExpenseResponse = zod.object({
   "id": zod.number(),
   "title": zod.string(),
   "amount": zod.number(),
-  "category": zod.enum(['Utilities', 'Bazar', 'One-Time']),
+  "category": zod.string(),
   "date": zod.coerce.date(),
   "type": zod.enum(['recurring', 'one-time']),
   "createdAt": zod.coerce.date()
@@ -128,7 +128,7 @@ export const GetMonthlySummaryResponse = zod.object({
   "recurringTotal": zod.number(),
   "oneTimeTotal": zod.number(),
   "byCategory": zod.array(zod.object({
-  "category": zod.enum(['Utilities', 'Bazar', 'One-Time']),
+  "category": zod.string(),
   "total": zod.number()
 }))
 })

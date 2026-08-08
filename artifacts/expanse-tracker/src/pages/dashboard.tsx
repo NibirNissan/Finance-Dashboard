@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocalUser } from "@/hooks/use-local-user";
 import {
   useCreateExpense,
   useDeleteExpense,
@@ -26,19 +28,20 @@ import {
   Plus,
   ReceiptText,
   RefreshCw,
+  Shield,
   Sparkles,
   Sun,
   Trash2,
+  User,
   X,
 } from "lucide-react";
 
-const categories = ["Utilities", "Bazar", "One-Time"] as const;
-type Category = (typeof categories)[number];
-const categoryColor: Record<Category, string> = {
-  Utilities: "#42647b",
-  Bazar: "#c49435",
-  "One-Time": "#bf6654",
-};
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
+const CATEGORY_PALETTE = ["#42647b", "#c49435", "#bf6654", "#5c7a5e", "#7b5c78", "#7b6e5c"];
+const KNOWN_COLORS: Record<string, string> = { Utilities: "#42647b", Bazar: "#c49435", "One-Time": "#bf6654" };
+function getCategoryColor(name: string, index: number): string {
+  return KNOWN_COLORS[name] ?? CATEGORY_PALETTE[index % CATEGORY_PALETTE.length];
+}
 const currentMonth = new Date().toISOString().slice(0, 7);
 const money = (amount: number) =>
   `৳${new Intl.NumberFormat("en-BD", {
@@ -79,17 +82,19 @@ function ExpenseForm({
   initial,
   onDone,
   onCancel,
+  availableCategories = ["Utilities", "Bazar", "One-Time"],
 }: {
   initial?: Expense;
   onDone: () => void;
   onCancel?: () => void;
+  availableCategories?: string[];
 }) {
   const create = useCreateExpense();
   const update = useUpdateExpense();
   const [form, setForm] = useState<ExpenseInput>({
     title: initial?.title ?? "",
     amount: initial?.amount ?? 0,
-    category: initial?.category ?? "Bazar",
+    category: initial?.category ?? availableCategories[0] ?? "",
     date: initial ? dateOnly(initial.date) : new Date().toISOString().slice(0, 10),
     type: initial?.type ?? "one-time",
   });
@@ -165,7 +170,7 @@ function ExpenseForm({
       </div>
       <Field label="Category">
         <div className="grid grid-cols-3 gap-2">
-          {categories.map((category) => (
+          {availableCategories.map((category) => (
             <button
               type="button"
               key={category}
@@ -214,13 +219,32 @@ function ExpenseForm({
 }
 
 export default function Dashboard() {
+  const { user, logout } = useLocalUser();
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Expense>();
   const [deleting, setDeleting] = useState<number>();
-  const [filter, setFilter] = useState<Category | "All">("All");
+  const [filter, setFilter] = useState<string>("All");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [darkMode, setDarkMode] = useState(false);
+
+  const { data: fetchedCategories = [] } = useQuery<{ id: number; name: string; icon: string | null; isActive: boolean; sortOrder: number }[]>({
+    queryKey: ["public-categories"],
+    queryFn: async () => { const r = await fetch(`${BASE_URL}/api/categories`); return r.json(); },
+    staleTime: 60_000,
+  });
+  const { data: settings } = useQuery<{ announcementText: string; isAnnouncementActive: boolean; allowRegistrations: boolean }>({
+    queryKey: ["public-settings"],
+    queryFn: async () => { const r = await fetch(`${BASE_URL}/api/settings`); return r.json(); },
+    staleTime: 30_000,
+  });
+  const categoryColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    fetchedCategories.forEach((c, i) => { map[c.name] = getCategoryColor(c.name, i); });
+    return map;
+  }, [fetchedCategories]);
+
   const list = useListExpenses({
     query: { queryKey: getListExpensesQueryKey() },
   });
@@ -260,7 +284,7 @@ export default function Dashboard() {
   const count = summary.data?.transactionCount ?? expenses.length;
   const grouped = useMemo(
     () =>
-      categories.map((category) => ({
+      fetchedCategories.map(({ name: category }) => ({
         category,
         total:
           summary.data?.byCategory?.find((item) => item.category === category)?.total ??
@@ -268,7 +292,7 @@ export default function Dashboard() {
             .filter((expense) => expense.category === category)
             .reduce((sum, expense) => sum + expense.amount, 0),
       })),
-    [summary.data, expenses],
+    [summary.data, expenses, fetchedCategories],
   );
 
   const refresh = () => {
@@ -362,6 +386,29 @@ export default function Dashboard() {
             <ReceiptText size={17} className="text-sidebar-primary" />
             Overview
           </button>
+          <button
+            onClick={() => navigate("/profile")}
+            className="flex items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <User size={17} className="text-sidebar-primary/60" />
+            Profile
+          </button>
+          <button
+            onClick={() => navigate("/pricing")}
+            className="flex items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <Sparkles size={17} className="text-sidebar-primary/60" />
+            Pricing
+          </button>
+          {user?.role === "admin" && (
+            <button
+              onClick={() => navigate("/admin")}
+              className="flex items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-amber-600 transition hover:bg-sidebar-accent"
+            >
+              <Shield size={17} className="text-amber-500" />
+              Admin Panel
+            </button>
+          )}
         </nav>
         <div className="mt-auto rounded-xl border border-sidebar-border bg-sidebar-accent/60 p-4">
           <Sparkles size={16} className="mb-3 text-sidebar-primary" />
@@ -370,15 +417,27 @@ export default function Dashboard() {
         </div>
       </aside>
       <main className="md:ml-[238px]">
+        {settings?.isAnnouncementActive && settings?.announcementText && (
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 text-sm text-amber-800 text-center font-medium">
+            📢 {settings.announcementText}
+          </div>
+        )}
         <header className="border-b border-border/70 px-5 py-5 md:px-10 md:py-7">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Personal ledger</p>
               <h1 className="mt-1 font-serif text-3xl tracking-tight md:text-4xl">
-                Good morning, Alex<span className="text-accent">.</span>
+                Good morning, {user?.name?.split(" ")[0] ?? "there"}<span className="text-accent">.</span>
               </h1>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate("/profile")}
+                title={user?.name ?? "Profile"}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm transition hover:opacity-80"
+              >
+                {(user?.name ?? "U").split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+              </button>
               <button
                 onClick={toggleTheme}
                 data-testid="button-theme-toggle"
@@ -481,7 +540,7 @@ export default function Dashboard() {
                         <span className="font-mono text-xs text-muted-foreground">{money(amount)}</span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${percentage}%`, backgroundColor: categoryColor[category] }} />
+                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${percentage}%`, backgroundColor: categoryColorMap[category] ?? getCategoryColor(category, 0) }} />
                       </div>
                     </div>
                   );
@@ -496,7 +555,7 @@ export default function Dashboard() {
                 <h2 className="mt-1 font-serif text-3xl">Recent expenses</h2>
               </div>
               <div className="flex gap-1 rounded-lg bg-muted p-1">
-                {(["All", ...categories] as const).map((category) => (
+                {(["All", ...fetchedCategories.map(c => c.name)]).map((category) => (
                   <button
                     key={category}
                     onClick={() => setFilter(category)}
@@ -532,7 +591,7 @@ export default function Dashboard() {
                 <div>
                   {visible.slice(0, 8).map((expense) => (
                     <div key={expense.id} data-testid={`row-expense-${expense.id}`} className="group flex items-center gap-3 border-b px-4 py-4 last:border-0 md:px-6">
-                      <div className="grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold" style={{ backgroundColor: `${categoryColor[expense.category]}18`, color: categoryColor[expense.category] }}>
+                      <div className="grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold" style={{ backgroundColor: `${categoryColorMap[expense.category] ?? getCategoryColor(expense.category, 0)}18`, color: categoryColorMap[expense.category] ?? getCategoryColor(expense.category, 0) }}>
                         {expense.title.slice(0, 1).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -561,7 +620,7 @@ export default function Dashboard() {
       {showForm && (
         <div className="fixed inset-0 z-30 grid items-end bg-primary/20 p-0 backdrop-blur-sm sm:items-center sm:p-5">
           <div className="w-full rounded-t-2xl border bg-card p-6 shadow-lg sm:mx-auto sm:max-w-md sm:rounded-2xl">
-            <ExpenseForm initial={editing} onDone={done} onCancel={() => { setShowForm(false); setEditing(undefined); }} />
+            <ExpenseForm initial={editing} onDone={done} onCancel={() => { setShowForm(false); setEditing(undefined); }} availableCategories={fetchedCategories.map(c => c.name)} />
           </div>
         </div>
       )}

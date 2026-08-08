@@ -1,0 +1,587 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocalUser } from "@/hooks/use-local-user";
+import { useToast } from "@/hooks/use-toast";
+import {
+  ArrowLeft,
+  Crown,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Shield,
+  ToggleLeft,
+  ToggleRight,
+  TrendingUp,
+  Trash2,
+  Users,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function authFetch(path: string, init?: RequestInit) {
+  return fetch(`${BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...init?.headers,
+    },
+  });
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface AdminUser {
+  id: number; name: string; email: string; accountType: string;
+  role: string; subscriptionPlan: string; subscriptionExpiry: string | null;
+  status: string; createdAt: string;
+}
+interface Stats { totalUsers: number; activeSubscribers: number; totalRevenue: number; }
+interface Plan {
+  id: number; planName: string; slug: string; price: number;
+  durationInMonths: number; features: string[]; isActive: boolean; sortOrder: number;
+}
+interface Cat { id: number; name: string; icon: string | null; isActive: boolean; sortOrder: number; }
+interface Settings {
+  id: number; announcementText: string;
+  isAnnouncementActive: boolean; allowRegistrations: boolean;
+}
+
+// ── Badge helpers ─────────────────────────────────────────────────────────────
+
+const planBadge: Record<string, string> = {
+  free: "bg-stone-100 text-stone-500",
+  monthly: "bg-blue-100 text-blue-700",
+  yearly: "bg-amber-100 text-amber-700",
+};
+const statusBadge = { active: "bg-emerald-100 text-emerald-700", suspended: "bg-red-100 text-red-600" };
+
+type AdminTab = "users" | "pricing" | "categories" | "settings";
+const TABS: { key: AdminTab; label: string }[] = [
+  { key: "users", label: "Users" },
+  { key: "pricing", label: "Pricing Manager" },
+  { key: "categories", label: "Category Manager" },
+  { key: "settings", label: "Global Settings" },
+];
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+export default function Admin() {
+  const { user } = useLocalUser();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [tab, setTab] = useState<AdminTab>("users");
+
+  return (
+    <div className="min-h-screen bg-[#F5F0E8]">
+      {/* Header */}
+      <div className="bg-stone-900 text-white px-6 py-4 flex items-center gap-4">
+        <button onClick={() => navigate("/dashboard")} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors text-sm">
+          <ArrowLeft className="w-4 h-4" /> Dashboard
+        </button>
+        <span className="text-white/20">·</span>
+        <div className="flex items-center gap-2">
+          <Shield className="w-4 h-4 text-amber-400" />
+          <span className="text-sm font-medium">Admin Panel</span>
+        </div>
+        <div className="ml-auto text-xs text-white/40">Signed in as {user?.name}</div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white border-b border-stone-200 sticky top-0 z-20">
+        <div className="max-w-6xl mx-auto px-6 flex">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={cn(
+                "px-5 py-3.5 text-sm font-medium border-b-2 transition-colors",
+                tab === t.key
+                  ? "border-stone-900 text-stone-900"
+                  : "border-transparent text-stone-400 hover:text-stone-700",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        {tab === "users" && <UsersTab toast={toast} qc={qc} />}
+        {tab === "pricing" && <PricingTab toast={toast} qc={qc} />}
+        {tab === "categories" && <CategoriesTab toast={toast} qc={qc} />}
+        {tab === "settings" && <SettingsTab toast={toast} qc={qc} />}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: Users
+// ══════════════════════════════════════════════════════════════════════════════
+
+function UsersTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; qc: ReturnType<typeof useQueryClient> }) {
+  const [openMenu, setOpenMenu] = useState<number | null>(null);
+  const [upgradeModal, setUpgradeModal] = useState<AdminUser | null>(null);
+  const [upgradePlan, setUpgradePlan] = useState<"monthly" | "yearly">("monthly");
+
+  const { data: stats, isLoading: statsLoading } = useQuery<Stats>({
+    queryKey: ["admin-stats"],
+    queryFn: async () => { const r = await authFetch("/api/admin/stats"); return r.json(); },
+  });
+  const { data: users = [], isLoading: usersLoading } = useQuery<AdminUser[]>({
+    queryKey: ["admin-users"],
+    queryFn: async () => { const r = await authFetch("/api/admin/users"); return r.json(); },
+  });
+
+  const toggleStatus = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await authFetch(`/api/admin/user/${id}/toggle-status`, { method: "POST" });
+      if (!r.ok) throw new Error((await r.json()).error);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-users"] }); qc.invalidateQueries({ queryKey: ["admin-stats"] }); toast({ title: "Status updated" }); setOpenMenu(null); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const upgradeUser = useMutation({
+    mutationFn: async ({ id, plan }: { id: number; plan: string }) => {
+      const r = await authFetch(`/api/admin/user/${id}/upgrade`, { method: "POST", body: JSON.stringify({ plan }) });
+      if (!r.ok) throw new Error((await r.json()).error);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-users"] }); qc.invalidateQueries({ queryKey: ["admin-stats"] }); toast({ title: "Plan upgraded" }); setUpgradeModal(null); setOpenMenu(null); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const statCards = [
+    { label: "Total Users", value: statsLoading ? "—" : stats?.totalUsers ?? 0, icon: Users, color: "text-blue-500", bg: "bg-blue-50" },
+    { label: "Active Subscribers", value: statsLoading ? "—" : stats?.activeSubscribers ?? 0, icon: Crown, color: "text-amber-500", bg: "bg-amber-50" },
+    { label: "Total Revenue", value: statsLoading ? "—" : `৳${(stats?.totalRevenue ?? 0).toLocaleString()}`, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        {statCards.map(({ label, value, icon: Icon, color, bg }) => (
+          <div key={label} className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 flex items-center gap-4">
+            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", bg)}><Icon className={cn("w-6 h-6", color)} /></div>
+            <div><p className="text-xs font-medium text-stone-400 uppercase tracking-wide">{label}</p><p className="text-2xl font-bold text-stone-900 mt-0.5">{String(value)}</p></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-stone-100">
+          <h2 className="font-semibold text-stone-900">User Management</h2>
+          <p className="text-xs text-stone-400 mt-0.5">{users.length} registered users</p>
+        </div>
+        {usersLoading ? (
+          <div className="py-16 text-center text-stone-400 text-sm">Loading…</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-xs font-semibold text-stone-400 uppercase tracking-wide border-b border-stone-100 bg-stone-50/60">
+                <th className="text-left px-6 py-3">Name</th>
+                <th className="text-left px-4 py-3">Email</th>
+                <th className="text-left px-4 py-3">Type</th>
+                <th className="text-left px-4 py-3">Plan</th>
+                <th className="text-left px-4 py-3">Status</th>
+                <th className="text-left px-4 py-3">Joined</th>
+                <th className="px-4 py-3" />
+              </tr></thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id} className="border-b border-stone-50 hover:bg-stone-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-stone-900 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {u.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+                        </div>
+                        <div><p className="font-medium text-stone-900">{u.name}</p>{u.role === "admin" && <p className="text-xs text-amber-600 font-medium">Admin</p>}</div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 text-stone-500">{u.email}</td>
+                    <td className="px-4 py-4 text-stone-500">{u.accountType}</td>
+                    <td className="px-4 py-4">
+                      <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", planBadge[u.subscriptionPlan] ?? "bg-stone-100 text-stone-500")}>
+                        {u.subscriptionPlan.charAt(0).toUpperCase() + u.subscriptionPlan.slice(1)}
+                      </span>
+                      {u.subscriptionExpiry && <p className="text-xs text-stone-400 mt-0.5">until {new Date(u.subscriptionExpiry).toLocaleDateString()}</p>}
+                    </td>
+                    <td className="px-4 py-4"><span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", statusBadge[u.status as keyof typeof statusBadge] ?? statusBadge.active)}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></td>
+                    <td className="px-4 py-4 text-stone-400 text-xs">{new Date(u.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-4 relative">
+                      {u.role !== "admin" && (
+                        <div className="relative">
+                          <button onClick={() => setOpenMenu(openMenu === u.id ? null : u.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400 transition-colors"><MoreHorizontal className="w-4 h-4" /></button>
+                          {openMenu === u.id && (
+                            <div className="absolute right-0 top-10 z-20 bg-white rounded-xl shadow-xl border border-stone-100 py-1 w-44">
+                              <button onClick={() => toggleStatus.mutate(u.id)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 transition-colors">
+                                {u.status === "active" ? <span className="text-red-600">Suspend user</span> : <span className="text-emerald-600">Unban user</span>}
+                              </button>
+                              <button onClick={() => { setUpgradeModal(u); setOpenMenu(null); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 text-stone-700 transition-colors">Manually upgrade</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {openMenu !== null && <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />}
+
+      {upgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
+            <h2 className="text-xl font-semibold text-stone-900 mb-1">Manually upgrade</h2>
+            <p className="text-stone-500 text-sm mb-6">Upgrading <strong>{upgradeModal.name}</strong>'s plan.</p>
+            <div className="flex rounded-lg border border-stone-200 overflow-hidden mb-6">
+              {(["monthly", "yearly"] as const).map((p) => (
+                <button key={p} onClick={() => setUpgradePlan(p)} className={cn("flex-1 py-2.5 text-sm font-medium transition-colors", upgradePlan === p ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-50")}>
+                  {p === "monthly" ? "Monthly · ৳100" : "Yearly · ৳500"}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setUpgradeModal(null)} className="flex-1 py-2.5 rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 text-sm font-medium transition-colors">Cancel</button>
+              <button onClick={() => upgradeUser.mutate({ id: upgradeModal.id, plan: upgradePlan })} disabled={upgradeUser.isPending} className="flex-1 py-2.5 rounded-lg bg-stone-900 text-white hover:bg-stone-800 text-sm font-medium transition-colors disabled:opacity-60">
+                {upgradeUser.isPending ? "Upgrading…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: Pricing Manager
+// ══════════════════════════════════════════════════════════════════════════════
+
+const emptyPlan = { planName: "", slug: "", price: 0, durationInMonths: 1, features: [""], isActive: true, sortOrder: 0 };
+
+function PricingTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; qc: ReturnType<typeof useQueryClient> }) {
+  const [modal, setModal] = useState<Partial<Plan> & { _edit?: boolean } | null>(null);
+
+  const { data: plans = [], isLoading } = useQuery<Plan[]>({
+    queryKey: ["admin-pricing-plans"],
+    queryFn: async () => { const r = await authFetch("/api/admin/pricing-plans"); return r.json(); },
+  });
+
+  const savePlan = useMutation({
+    mutationFn: async (p: Partial<Plan>) => {
+      const isEdit = !!p.id;
+      const r = await authFetch(isEdit ? `/api/admin/pricing-plans/${p.id}` : "/api/admin/pricing-plans", {
+        method: isEdit ? "PATCH" : "POST",
+        body: JSON.stringify({ planName: p.planName, slug: p.slug, price: Number(p.price), durationInMonths: Number(p.durationInMonths), features: p.features?.filter(Boolean), isActive: p.isActive, sortOrder: p.sortOrder }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error ?? "Failed");
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-pricing-plans"] }); toast({ title: "Plan saved" }); setModal(null); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const togglePlan = useMutation({
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      const r = await authFetch(`/api/admin/pricing-plans/${id}`, { method: "PATCH", body: JSON.stringify({ isActive: !isActive }) });
+      if (!r.ok) throw new Error((await r.json()).error);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-pricing-plans"] }); toast({ title: "Plan updated" }); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deletePlan = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await authFetch(`/api/admin/pricing-plans/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error((await r.json()).error);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-pricing-plans"] }); toast({ title: "Plan deleted" }); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const editing = modal ?? { ...emptyPlan };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div><h2 className="font-semibold text-stone-900">Pricing Plans</h2><p className="text-xs text-stone-400">{plans.length} plans</p></div>
+        <button onClick={() => setModal({ ...emptyPlan })} className="flex items-center gap-2 bg-stone-900 text-white text-sm px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors"><Plus className="w-4 h-4" /> Add Plan</button>
+      </div>
+
+      {isLoading ? <div className="py-16 text-center text-stone-400">Loading…</div> : (
+        <div className="grid gap-4">
+          {plans.map((plan) => (
+            <div key={plan.id} className={cn("bg-white rounded-2xl border p-5 flex gap-4 items-start", plan.isActive ? "border-stone-100" : "border-stone-100 opacity-60")}>
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-1">
+                  <h3 className="font-semibold text-stone-900">{plan.planName}</h3>
+                  <span className="text-xs text-stone-400 font-mono bg-stone-100 px-2 py-0.5 rounded">{plan.slug}</span>
+                  {!plan.isActive && <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded">Inactive</span>}
+                </div>
+                <p className="text-2xl font-bold text-stone-900">৳{plan.price} <span className="text-sm font-normal text-stone-400">/ {plan.durationInMonths} month{plan.durationInMonths > 1 ? "s" : ""}</span></p>
+                <ul className="mt-2 space-y-0.5">
+                  {plan.features.map((f, i) => <li key={i} className="text-xs text-stone-500">• {f}</li>)}
+                </ul>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button onClick={() => togglePlan.mutate({ id: plan.id, isActive: plan.isActive })} title={plan.isActive ? "Deactivate" : "Activate"} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400 transition-colors">
+                  {plan.isActive ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5" />}
+                </button>
+                <button onClick={() => setModal({ ...plan, _edit: true })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400 transition-colors"><Pencil className="w-4 h-4" /></button>
+                <button onClick={() => deletePlan.mutate(plan.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modal !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-stone-900 mb-5">{editing.id ? "Edit Plan" : "New Plan"}</h2>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-xs font-medium text-stone-500 block mb-1">Plan Name</label>
+                  <input className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editing.planName ?? ""} onChange={(e) => setModal({ ...editing, planName: e.target.value })} /></div>
+                <div><label className="text-xs font-medium text-stone-500 block mb-1">Slug</label>
+                  <input className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono" value={editing.slug ?? ""} onChange={(e) => setModal({ ...editing, slug: e.target.value.toLowerCase().replace(/\s+/g, "-") })} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-xs font-medium text-stone-500 block mb-1">Price (৳)</label>
+                  <input type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editing.price ?? 0} onChange={(e) => setModal({ ...editing, price: parseFloat(e.target.value) })} /></div>
+                <div><label className="text-xs font-medium text-stone-500 block mb-1">Duration (months)</label>
+                  <input type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editing.durationInMonths ?? 1} onChange={(e) => setModal({ ...editing, durationInMonths: parseInt(e.target.value) })} /></div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-stone-500 block mb-1">Features (one per line)</label>
+                <textarea className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm h-28 resize-none" value={(editing.features ?? []).join("\n")} onChange={(e) => setModal({ ...editing, features: e.target.value.split("\n") })} />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer">
+                <input type="checkbox" checked={editing.isActive ?? true} onChange={(e) => setModal({ ...editing, isActive: e.target.checked })} />
+                Active (visible to users)
+              </label>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setModal(null)} className="flex-1 py-2.5 rounded-lg border border-stone-200 text-stone-700 text-sm font-medium">Cancel</button>
+              <button onClick={() => savePlan.mutate(editing as Plan)} disabled={savePlan.isPending} className="flex-1 py-2.5 rounded-lg bg-stone-900 text-white text-sm font-medium disabled:opacity-60">
+                {savePlan.isPending ? "Saving…" : "Save Plan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: Category Manager
+// ══════════════════════════════════════════════════════════════════════════════
+
+const emptyCat = { name: "", icon: "", isActive: true, sortOrder: 0 };
+
+function CategoriesTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; qc: ReturnType<typeof useQueryClient> }) {
+  const [modal, setModal] = useState<Partial<Cat> | null>(null);
+
+  const { data: cats = [], isLoading } = useQuery<Cat[]>({
+    queryKey: ["admin-categories"],
+    queryFn: async () => { const r = await authFetch("/api/admin/categories"); return r.json(); },
+  });
+
+  const saveCat = useMutation({
+    mutationFn: async (c: Partial<Cat>) => {
+      const isEdit = !!c.id;
+      const r = await authFetch(isEdit ? `/api/admin/categories/${c.id}` : "/api/admin/categories", {
+        method: isEdit ? "PATCH" : "POST",
+        body: JSON.stringify({ name: c.name, icon: c.icon || null, isActive: c.isActive, sortOrder: Number(c.sortOrder ?? 0) }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error ?? "Failed");
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-categories"] }); toast({ title: "Category saved" }); setModal(null); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const toggleCat = useMutation({
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      const r = await authFetch(`/api/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify({ isActive: !isActive }) });
+      if (!r.ok) throw new Error((await r.json()).error);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-categories"] }); toast({ title: "Category updated" }); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteCat = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await authFetch(`/api/admin/categories/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error((await r.json()).error);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-categories"] }); toast({ title: "Category deleted" }); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const editing = modal ?? { ...emptyCat };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div><h2 className="font-semibold text-stone-900">Expense Categories</h2><p className="text-xs text-stone-400">{cats.length} categories</p></div>
+        <button onClick={() => setModal({ ...emptyCat })} className="flex items-center gap-2 bg-stone-900 text-white text-sm px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors"><Plus className="w-4 h-4" /> Add Category</button>
+      </div>
+
+      {isLoading ? <div className="py-16 text-center text-stone-400">Loading…</div> : (
+        <div className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead><tr className="text-xs font-semibold text-stone-400 uppercase tracking-wide border-b border-stone-100 bg-stone-50/60">
+              <th className="text-left px-6 py-3">Category</th>
+              <th className="text-left px-4 py-3">Sort Order</th>
+              <th className="text-left px-4 py-3">Status</th>
+              <th className="px-4 py-3" />
+            </tr></thead>
+            <tbody>
+              {cats.map((c) => (
+                <tr key={c.id} className="border-b border-stone-50 hover:bg-stone-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{c.icon ?? "📁"}</span>
+                      <span className="font-medium text-stone-900">{c.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-stone-500">{c.sortOrder}</td>
+                  <td className="px-4 py-4">
+                    <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", c.isActive ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-400")}>
+                      {c.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-1 justify-end">
+                      <button onClick={() => toggleCat.mutate({ id: c.id, isActive: c.isActive })} title={c.isActive ? "Deactivate" : "Activate"} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400 transition-colors">
+                        {c.isActive ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5" />}
+                      </button>
+                      <button onClick={() => setModal({ ...c })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400 transition-colors"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => deleteCat.mutate(c.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modal !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-sm">
+            <h2 className="text-lg font-semibold text-stone-900 mb-5">{editing.id ? "Edit Category" : "New Category"}</h2>
+            <div className="space-y-4">
+              <div><label className="text-xs font-medium text-stone-500 block mb-1">Name</label>
+                <input className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editing.name ?? ""} onChange={(e) => setModal({ ...editing, name: e.target.value })} /></div>
+              <div><label className="text-xs font-medium text-stone-500 block mb-1">Icon (emoji)</label>
+                <input className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" placeholder="e.g. 🛒" value={editing.icon ?? ""} onChange={(e) => setModal({ ...editing, icon: e.target.value })} /></div>
+              <div><label className="text-xs font-medium text-stone-500 block mb-1">Sort Order</label>
+                <input type="number" className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" value={editing.sortOrder ?? 0} onChange={(e) => setModal({ ...editing, sortOrder: parseInt(e.target.value) })} /></div>
+              <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer">
+                <input type="checkbox" checked={editing.isActive ?? true} onChange={(e) => setModal({ ...editing, isActive: e.target.checked })} />
+                Active (available in expense form)
+              </label>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setModal(null)} className="flex-1 py-2.5 rounded-lg border border-stone-200 text-stone-700 text-sm font-medium">Cancel</button>
+              <button onClick={() => saveCat.mutate(editing as Cat)} disabled={saveCat.isPending} className="flex-1 py-2.5 rounded-lg bg-stone-900 text-white text-sm font-medium disabled:opacity-60">
+                {saveCat.isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: Global Settings
+// ══════════════════════════════════════════════════════════════════════════════
+
+function SettingsTab({ toast, qc }: { toast: ReturnType<typeof useToast>["toast"]; qc: ReturnType<typeof useQueryClient> }) {
+  const [form, setForm] = useState<Partial<Settings> | null>(null);
+
+  const { data: settings, isLoading } = useQuery<Settings>({
+    queryKey: ["admin-settings"],
+    queryFn: async () => { const r = await authFetch("/api/admin/settings"); const d = await r.json(); setForm(d); return d; },
+  });
+
+  const save = useMutation({
+    mutationFn: async (s: Partial<Settings>) => {
+      const r = await authFetch("/api/admin/settings", { method: "PATCH", body: JSON.stringify(s) });
+      if (!r.ok) throw new Error((await r.json()).error ?? "Failed");
+      return r.json();
+    },
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ["admin-settings"] });
+      qc.invalidateQueries({ queryKey: ["public-settings"] });
+      setForm(d);
+      toast({ title: "Settings saved" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const current = form ?? settings ?? {};
+
+  if (isLoading) return <div className="py-16 text-center text-stone-400">Loading…</div>;
+
+  return (
+    <div className="max-w-lg space-y-6">
+      <div><h2 className="font-semibold text-stone-900">Global Settings</h2><p className="text-xs text-stone-400 mt-0.5">Changes take effect immediately for all users.</p></div>
+
+      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-5">
+        {/* Announcement */}
+        <div>
+          <h3 className="text-sm font-semibold text-stone-900 mb-3">Announcement Banner</h3>
+          <label className="flex items-center gap-3 mb-3 cursor-pointer">
+            <div
+              onClick={() => setForm({ ...current, isAnnouncementActive: !current.isAnnouncementActive })}
+              className={cn("w-10 h-6 rounded-full transition-colors flex items-center px-0.5 cursor-pointer", current.isAnnouncementActive ? "bg-amber-400" : "bg-stone-200")}
+            >
+              <div className={cn("w-5 h-5 rounded-full bg-white shadow transition-transform", current.isAnnouncementActive ? "translate-x-4" : "translate-x-0")} />
+            </div>
+            <span className="text-sm text-stone-700">{current.isAnnouncementActive ? "Banner enabled" : "Banner disabled"}</span>
+          </label>
+          <textarea
+            className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm h-20 resize-none"
+            placeholder="Type your announcement message…"
+            value={current.announcementText ?? ""}
+            onChange={(e) => setForm({ ...current, announcementText: e.target.value })}
+          />
+        </div>
+
+        <div className="border-t border-stone-100 pt-5">
+          <h3 className="text-sm font-semibold text-stone-900 mb-3">Registration</h3>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div
+              onClick={() => setForm({ ...current, allowRegistrations: !current.allowRegistrations })}
+              className={cn("w-10 h-6 rounded-full transition-colors flex items-center px-0.5 cursor-pointer", current.allowRegistrations ? "bg-emerald-400" : "bg-stone-200")}
+            >
+              <div className={cn("w-5 h-5 rounded-full bg-white shadow transition-transform", current.allowRegistrations ? "translate-x-4" : "translate-x-0")} />
+            </div>
+            <span className="text-sm text-stone-700">{current.allowRegistrations ? "New registrations allowed" : "Registrations disabled"}</span>
+          </label>
+        </div>
+      </div>
+
+      <button
+        onClick={() => save.mutate(current)}
+        disabled={save.isPending}
+        className="bg-stone-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors disabled:opacity-60"
+      >
+        {save.isPending ? "Saving…" : "Save Settings"}
+      </button>
+    </div>
+  );
+}
