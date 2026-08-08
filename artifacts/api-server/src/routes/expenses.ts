@@ -122,8 +122,6 @@ router.get("/expenses/summary/monthly", async (req, res): Promise<void> => {
     .select({
       total: sql<number>`coalesce(sum(${expensesTable.amount}), 0)`,
       transactionCount: sql<number>`count(*)`,
-      recurringTotal: sql<number>`coalesce(sum(case when ${expensesTable.type} = 'recurring' then ${expensesTable.amount} else 0 end), 0)`,
-      oneTimeTotal: sql<number>`coalesce(sum(case when ${expensesTable.type} = 'one-time' then ${expensesTable.amount} else 0 end), 0)`,
     })
     .from(expensesTable)
     .where(where);
@@ -148,8 +146,6 @@ router.get("/expenses/summary/monthly", async (req, res): Promise<void> => {
       month,
       total: Number(totals?.total ?? 0),
       transactionCount: Number(totals?.transactionCount ?? 0),
-      recurringTotal: Number(totals?.recurringTotal ?? 0),
-      oneTimeTotal: Number(totals?.oneTimeTotal ?? 0),
       byCategory,
     }),
   );

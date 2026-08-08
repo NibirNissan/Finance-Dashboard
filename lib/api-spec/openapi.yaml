@@ -169,13 +169,13 @@ components:
         date:
           type: string
           format: date
-        type:
-          type: string
-          enum: [recurring, one-time]
+        note:
+          type: ["string", "null"]
+          maxLength: 500
         createdAt:
           type: string
           format: date-time
-      required: [id, title, amount, category, date, type, createdAt]
+      required: [id, title, amount, category, date, createdAt]
     ExpenseInput:
       type: object
       properties:
@@ -193,10 +193,10 @@ components:
         date:
           type: string
           format: date
-        type:
-          type: string
-          enum: [recurring, one-time]
-      required: [title, amount, category, date, type]
+        note:
+          type: ["string", "null"]
+          maxLength: 500
+      required: [title, amount, category, date]
     CategoryTotal:
       type: object
       properties:
@@ -218,17 +218,11 @@ components:
           format: double
         transactionCount:
           type: number
-        recurringTotal:
-          type: number
-          format: double
-        oneTimeTotal:
-          type: number
-          format: double
         byCategory:
           type: array
           items:
             $ref: "#/components/schemas/CategoryTotal"
-      required: [month, total, transactionCount, recurringTotal, oneTimeTotal, byCategory]
+      required: [month, total, transactionCount, byCategory]
     ErrorResponse:
       type: object
       properties:

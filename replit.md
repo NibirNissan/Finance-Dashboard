@@ -31,7 +31,7 @@ A personal finance dashboard for logging expenses and understanding monthly spen
 
 - Calendar dates are stored as PostgreSQL `date` values so expense days are not shifted by timezone conversions.
 - The shared API server and generated OpenAPI clients are used for all expense reads and mutations.
-- Monthly summaries are calculated from the database by category and expense type.
+- Monthly summaries are calculated from the database by category.
 
 ## Product
 

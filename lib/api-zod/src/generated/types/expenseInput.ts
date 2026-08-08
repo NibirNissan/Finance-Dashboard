@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ExpenseInputCategory } from './expenseInputCategory';
-import type { ExpenseInputType } from './expenseInputType';
 
 export interface ExpenseInput {
   /**
@@ -18,5 +17,9 @@ export interface ExpenseInput {
   amount: number;
   category: ExpenseInputCategory;
   date: Date;
-  type: ExpenseInputType;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
 }

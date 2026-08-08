@@ -13,8 +13,6 @@ export * from './expense';
 export * from './expenseCategory';
 export * from './expenseInput';
 export * from './expenseInputCategory';
-export * from './expenseInputType';
-export * from './expenseType';
 export * from './getMonthlySummaryParams';
 export * from './healthStatus';
 export * from './monthlySummary';

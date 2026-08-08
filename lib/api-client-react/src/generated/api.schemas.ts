@@ -18,21 +18,17 @@ export const ExpenseCategory = {
   'One-Time': 'One-Time',
 } as const;
 
-export type ExpenseType = typeof ExpenseType[keyof typeof ExpenseType];
-
-
-export const ExpenseType = {
-  recurring: 'recurring',
-  'one-time': 'one-time',
-} as const;
-
 export interface Expense {
   id: number;
   title: string;
   amount: number;
   category: ExpenseCategory;
   date: string;
-  type: ExpenseType;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
   createdAt: string;
 }
 
@@ -45,14 +41,6 @@ export const ExpenseInputCategory = {
   'One-Time': 'One-Time',
 } as const;
 
-export type ExpenseInputType = typeof ExpenseInputType[keyof typeof ExpenseInputType];
-
-
-export const ExpenseInputType = {
-  recurring: 'recurring',
-  'one-time': 'one-time',
-} as const;
-
 export interface ExpenseInput {
   /**
      * @minLength 1
@@ -63,7 +51,11 @@ export interface ExpenseInput {
   amount: number;
   category: ExpenseInputCategory;
   date: string;
-  type: ExpenseInputType;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
 }
 
 export type CategoryTotalCategory = typeof CategoryTotalCategory[keyof typeof CategoryTotalCategory];
@@ -85,8 +77,6 @@ export interface MonthlySummary {
   month: string;
   total: number;
   transactionCount: number;
-  recurringTotal: number;
-  oneTimeTotal: number;
   byCategory: CategoryTotal[];
 }
 

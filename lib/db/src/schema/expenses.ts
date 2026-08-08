@@ -8,15 +8,13 @@ export const expenseCategoryEnum = pgEnum("expense_category", [
   "One-Time",
 ]);
 
-export const expenseTypeEnum = pgEnum("expense_type", ["recurring", "one-time"]);
-
 export const expensesTable = pgTable("expenses", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2, mode: "number" }).notNull(),
   category: expenseCategoryEnum("category").notNull(),
   date: date("date", { mode: "string" }).notNull(),
-  type: expenseTypeEnum("type").notNull(),
+  note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
