@@ -12,7 +12,5 @@ export interface MonthlySummary {
   month: string;
   total: number;
   transactionCount: number;
-  recurringTotal: number;
-  oneTimeTotal: number;
   byCategory: CategoryTotal[];
 }

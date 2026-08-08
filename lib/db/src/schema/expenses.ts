@@ -12,8 +12,6 @@ import {
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 
-export const expenseTypeEnum = pgEnum("expense_type", ["recurring", "one-time"]);
-
 export const expensesTable = pgTable("expenses", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => usersTable.id),
@@ -21,7 +19,7 @@ export const expensesTable = pgTable("expenses", {
   amount: numeric("amount", { precision: 12, scale: 2, mode: "number" }).notNull(),
   category: text("category").notNull(),
   date: date("date", { mode: "string" }).notNull(),
-  type: expenseTypeEnum("type").notNull(),
+  note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

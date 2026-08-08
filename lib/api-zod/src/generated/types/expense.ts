@@ -13,6 +13,10 @@ export interface Expense {
   amount: number;
   category: string;
   date: Date;
-  type: ExpenseType;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
   createdAt: Date;
 }

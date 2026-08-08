@@ -23,7 +23,11 @@ export interface Expense {
   amount: number;
   category: string;
   date: string;
-  type: ExpenseType;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
   createdAt: string;
 }
 
@@ -45,7 +49,11 @@ export interface ExpenseInput {
   amount: number;
   category: string;
   date: string;
-  type: ExpenseInputType;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
 }
 
 export interface CategoryTotal {
@@ -58,8 +66,6 @@ export interface MonthlySummary {
   month: string;
   total: number;
   transactionCount: number;
-  recurringTotal: number;
-  oneTimeTotal: number;
   byCategory: CategoryTotal[];
 }
 

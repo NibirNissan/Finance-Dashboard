@@ -107,7 +107,7 @@ function ExpenseForm({
     amount: initial?.amount ?? 0,
     category: initial?.category ?? availableCategories[0] ?? "",
     date: initial ? dateOnly(initial.date) : new Date().toISOString().slice(0, 10),
-    type: initial?.type ?? "one-time",
+    note: initial?.note ?? "",
   });
   const set = (key: keyof ExpenseInput, value: string | number) =>
     setForm((valueBefore) => ({ ...valueBefore, [key]: value }));
@@ -116,7 +116,12 @@ function ExpenseForm({
     event.preventDefault();
     if (!form.title.trim() || Number(form.amount) <= 0) return;
     const data = {
-      data: { ...form, title: form.title.trim(), amount: Number(form.amount) },
+      data: {
+        ...form,
+        title: form.title.trim(),
+        amount: Number(form.amount),
+        note: form.note?.trim() || null,
+      },
     };
     if (initial) {
       update.mutate({ id: initial.id, ...data }, { onSuccess: onDone });
@@ -150,7 +155,7 @@ function ExpenseForm({
           onChange={(event) => set("title", event.target.value)}
           placeholder="e.g. Electric bill"
           data-testid="input-expense-title"
-          className="h-11 rounded-lg border bg-background px-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+               className="h-11 min-h-11 rounded-lg border bg-background px-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
         />
       </Field>
       <div className="grid grid-cols-2 gap-3">
@@ -165,7 +170,7 @@ function ExpenseForm({
               onChange={(event) => set("amount", Number(event.target.value))}
               placeholder="0.00"
               data-testid="input-expense-amount"
-              className="h-11 w-full rounded-lg border bg-background pl-7 pr-3 outline-none focus:border-primary"
+               className="h-11 min-h-11 w-full rounded-lg border bg-background pl-7 pr-3 outline-none focus:border-primary"
             />
           </div>
         </Field>
@@ -175,7 +180,7 @@ function ExpenseForm({
             value={form.date}
             onChange={(event) => set("date", event.target.value)}
             data-testid="input-expense-date"
-            className="h-11 rounded-lg border bg-background px-3 outline-none focus:border-primary"
+             className="h-11 min-h-11 rounded-lg border bg-background px-3 outline-none focus:border-primary"
           />
         </Field>
       </div>
@@ -187,7 +192,7 @@ function ExpenseForm({
               key={category}
               onClick={() => set("category", category)}
               data-testid={`button-category-${category}`}
-              className={`rounded-lg border px-2 py-2.5 text-xs font-semibold transition ${
+               className={`min-h-11 rounded-lg border px-2 py-2.5 text-xs font-semibold transition ${
                 form.category === category
                   ? "border-primary bg-primary text-primary-foreground"
                   : "bg-background hover:bg-muted"
@@ -198,29 +203,21 @@ function ExpenseForm({
           ))}
         </div>
       </Field>
-      <Field label="Frequency">
-        <div className="grid grid-cols-2 gap-2">
-          {(["one-time", "recurring"] as const).map((type) => (
-            <button
-              type="button"
-              key={type}
-              onClick={() => set("type", type)}
-              data-testid={`button-type-${type}`}
-              className={`rounded-lg border px-3 py-2.5 text-sm capitalize transition ${
-                form.type === type
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "bg-background hover:bg-muted"
-              }`}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
+      <Field label="Note (Optional)">
+        <textarea
+          value={form.note ?? ""}
+          onChange={(event) => set("note", event.target.value)}
+          placeholder="Add a little context"
+          maxLength={500}
+          rows={3}
+          data-testid="input-expense-note"
+          className="min-h-11 resize-y rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+        />
       </Field>
       <button
         disabled={pending}
         data-testid="button-save-expense"
-        className="mt-1 flex h-11 items-center justify-center gap-2 rounded-lg bg-primary font-semibold text-primary-foreground transition hover:-translate-y-0.5 disabled:opacity-60"
+         className="mt-1 flex h-11 min-h-11 items-center justify-center gap-2 rounded-lg bg-primary font-semibold text-primary-foreground transition hover:-translate-y-0.5 disabled:opacity-60"
       >
         {pending && <Loader2 size={16} className="animate-spin" />}
         {initial ? "Save changes" : "Add to ledger"}
@@ -380,7 +377,7 @@ export default function Dashboard() {
         prettyDate(expense.date),
         expense.title,
         expense.category,
-        expense.type === "one-time" ? "One-time" : "Recurring",
+        expense.note ?? "",
         pdfMoney(expense.amount),
       ]),
       theme: "striped",
@@ -493,7 +490,7 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-          <div className="mx-auto mt-6 flex max-w-[1240px] flex-wrap items-center justify-between gap-3">
+           <div className="mx-auto mt-5 flex max-w-[1240px] flex-wrap items-center justify-between gap-3 sm:mt-6">
             <div className="flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm">
               <button
                 onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}
@@ -503,7 +500,7 @@ export default function Dashboard() {
               >
                 <ArrowLeft size={15} />
               </button>
-              <span data-testid="text-selected-month" className="min-w-[140px] text-center font-mono text-xs font-medium">
+               <span data-testid="text-selected-month" className="min-w-[140px] text-center font-mono text-xs font-medium">
                 {monthLabel(selectedMonth)}
               </span>
               <button
@@ -525,9 +522,9 @@ export default function Dashboard() {
             </button>
           </div>
         </header>
-        <div className="mx-auto max-w-[1240px] px-5 py-7 md:px-10 md:py-10">
+         <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-5 sm:py-7 md:px-10 md:py-10">
           <div className="grid gap-5 lg:grid-cols-[1.35fr_1fr]">
-            <section className="relative overflow-hidden rounded-2xl bg-primary p-6 text-primary-foreground shadow-lg md:p-8 rise">
+             <section className="relative overflow-hidden rounded-2xl bg-primary p-5 text-primary-foreground shadow-lg sm:p-6 md:p-8 rise">
               <div className="absolute -right-10 -top-16 size-64 rounded-full border-[28px] border-accent/20" />
               <div className="absolute -bottom-24 right-28 size-56 rounded-full border border-sidebar-primary/20" />
               <div className="relative">
@@ -535,7 +532,7 @@ export default function Dashboard() {
                   <p className="text-sm text-primary-foreground/65">Spent in {monthLabel(selectedMonth)}</p>
                   <CalendarDays size={18} className="text-accent" />
                 </div>
-                <p data-testid="text-total-expenses" className="mt-7 font-mono text-5xl tracking-[-.08em] md:text-6xl">
+                 <p data-testid="text-total-expenses" className="mt-6 font-mono text-4xl tracking-[-.08em] sm:mt-7 sm:text-5xl md:text-6xl">
                   {money(total)}
                 </p>
                 <div className="mt-7 flex items-end justify-between">
@@ -548,11 +545,11 @@ export default function Dashboard() {
                 </div>
               </div>
             </section>
-            <section className="rounded-2xl border bg-card p-6 shadow-sm md:p-8 rise delay-1">
+             <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6 md:p-8 rise delay-1">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[.15em] text-muted-foreground">The shape of it</p>
-                  <h2 className="mt-1 font-serif text-2xl">By category</h2>
+                 <h2 className="mt-1 font-serif text-xl sm:text-2xl">By category</h2>
                 </div>
                 <span className="font-mono text-xs text-muted-foreground">{selectedMonth.replace("-", " / ")}</span>
               </div>
@@ -651,7 +648,7 @@ export default function Dashboard() {
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[.15em] text-muted-foreground">The paper trail</p>
-                <h2 className="mt-1 font-serif text-3xl">Recent expenses</h2>
+                 <h2 className="mt-1 font-serif text-2xl sm:text-3xl">Recent expenses</h2>
               </div>
               <div className="flex gap-1 rounded-lg bg-muted p-1">
                 {(["All", ...fetchedCategories.map(c => c.name)]).map((category) => (
@@ -694,14 +691,14 @@ export default function Dashboard() {
                         {expense.title.slice(0, 1).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{expense.title}</p>
+                         <p className="truncate text-sm font-semibold">{expense.title}</p>
+                         {expense.note && <p className="truncate text-xs text-muted-foreground">{expense.note}</p>}
                         <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                           <span>{expense.category}</span><span className="size-1 rounded-full bg-border" /><span>{prettyDate(expense.date)}</span>
-                          {expense.type === "recurring" && <><span className="size-1 rounded-full bg-border" /><span className="text-primary">Recurring</span></>}
                         </div>
                       </div>
-                      <span className="font-mono text-sm font-medium">{money(expense.amount)}</span>
-                      <div className="flex gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
+                       <span className="shrink-0 whitespace-nowrap font-mono text-sm font-medium">{money(expense.amount)}</span>
+                       <div className="flex shrink-0 gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                         <button onClick={() => { setEditing(expense); setShowForm(true); }} aria-label={`Edit ${expense.title}`} data-testid={`button-edit-expense-${expense.id}`} className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil size={15} /></button>
                         <button onClick={() => setDeleting(expense.id)} aria-label={`Delete ${expense.title}`} data-testid={`button-delete-expense-${expense.id}`} className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 size={15} /></button>
                       </div>

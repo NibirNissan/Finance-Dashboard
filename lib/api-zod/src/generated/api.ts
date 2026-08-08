@@ -20,13 +20,17 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary List expenses
  */
+export const listExpensesResponseNoteMax = 500;
+
+
+
 export const ListExpensesResponseItem = zod.object({
   "id": zod.number(),
   "title": zod.string(),
   "amount": zod.number(),
   "category": zod.string(),
   "date": zod.coerce.date(),
-  "type": zod.enum(['recurring', 'one-time']),
+  "note": zod.string().max(listExpensesResponseNoteMax).nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListExpensesResponse = zod.array(ListExpensesResponseItem)
@@ -39,6 +43,8 @@ export const createExpenseBodyTitleMax = 120;
 
 export const createExpenseBodyAmountExclusiveMin = 0;
 
+export const createExpenseBodyNoteMax = 500;
+
 
 
 export const CreateExpenseBody = zod.object({
@@ -46,8 +52,12 @@ export const CreateExpenseBody = zod.object({
   "amount": zod.number().gt(createExpenseBodyAmountExclusiveMin),
   "category": zod.string(),
   "date": zod.coerce.date(),
-  "type": zod.enum(['recurring', 'one-time'])
+  "note": zod.string().max(createExpenseBodyNoteMax).nullish()
 })
+
+export const createExpenseResponseNoteMax = 500;
+
+
 
 export const CreateExpenseResponse = zod.object({
   "id": zod.number(),
@@ -55,7 +65,7 @@ export const CreateExpenseResponse = zod.object({
   "amount": zod.number(),
   "category": zod.string(),
   "date": zod.coerce.date(),
-  "type": zod.enum(['recurring', 'one-time']),
+  "note": zod.string().max(createExpenseResponseNoteMax).nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -74,6 +84,8 @@ export const updateExpenseBodyTitleMax = 120;
 
 export const updateExpenseBodyAmountExclusiveMin = 0;
 
+export const updateExpenseBodyNoteMax = 500;
+
 
 
 export const UpdateExpenseBody = zod.object({
@@ -81,8 +93,12 @@ export const UpdateExpenseBody = zod.object({
   "amount": zod.number().gt(updateExpenseBodyAmountExclusiveMin),
   "category": zod.string(),
   "date": zod.coerce.date(),
-  "type": zod.enum(['recurring', 'one-time'])
+  "note": zod.string().max(updateExpenseBodyNoteMax).nullish()
 })
+
+export const updateExpenseResponseNoteMax = 500;
+
+
 
 export const UpdateExpenseResponse = zod.object({
   "id": zod.number(),
@@ -90,7 +106,7 @@ export const UpdateExpenseResponse = zod.object({
   "amount": zod.number(),
   "category": zod.string(),
   "date": zod.coerce.date(),
-  "type": zod.enum(['recurring', 'one-time']),
+  "note": zod.string().max(updateExpenseResponseNoteMax).nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -154,8 +170,6 @@ export const GetMonthlySummaryResponse = zod.object({
   "month": zod.string().regex(getMonthlySummaryResponseMonthRegExp),
   "total": zod.number(),
   "transactionCount": zod.number(),
-  "recurringTotal": zod.number(),
-  "oneTimeTotal": zod.number(),
   "byCategory": zod.array(zod.object({
   "category": zod.string(),
   "total": zod.number()
