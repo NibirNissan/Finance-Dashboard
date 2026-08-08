@@ -1,2 +1,3 @@
 - [Date-only API values](date-only-api-values.md) — normalize ISO timestamps before formatting calendar dates or filling date inputs.
 - [Clerk auth migration](clerk-auth-migration.md) — Replit-managed Clerk replaced custom JWT; session cookies for web, `req.localUser` in routes, `useLocalUser()` hook in frontend.
+- [expense-type column sync](expense-type-column.md) — DB expenses.type enum must stay in sync across Drizzle schema, api-zod schemas/types, and api-client-react; missing any layer causes silent 500s on all expense endpoints.
