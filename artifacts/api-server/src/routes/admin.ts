@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { count, eq, ne, and, gt } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { count, eq, ne, and, gt, isNull } from "drizzle-orm";
+import { db, usersTable, expensesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin } from "../middlewares/admin";
 
@@ -128,6 +128,20 @@ router.post(
     }
 
     res.json(publicUser(user));
+  },
+);
+
+router.post(
+  "/admin/expenses/purge-orphaned",
+  requireAuth,
+  requireAdmin,
+  async (_req, res): Promise<void> => {
+    const deleted = await db
+      .delete(expensesTable)
+      .where(isNull(expensesTable.userId))
+      .returning({ id: expensesTable.id });
+
+    res.json({ deleted: deleted.length, ids: deleted.map((r) => r.id) });
   },
 );
 
