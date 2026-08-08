@@ -70,6 +70,8 @@ router.get("/settings", async (_req, res): Promise<void> => {
     announcementText: s.announcementText,
     isAnnouncementActive: s.isAnnouncementActive,
     allowRegistrations: s.allowRegistrations,
+    bkashNumber: s.bkashNumber,
+    nagadNumber: s.nagadNumber,
   });
 });
 
@@ -163,6 +165,8 @@ const SettingsBody = z.object({
   announcementText: z.string().max(500).optional(),
   isAnnouncementActive: z.boolean().optional(),
   allowRegistrations: z.boolean().optional(),
+  bkashNumber: z.string().max(20).optional(),
+  nagadNumber: z.string().max(20).optional(),
 });
 
 router.get("/admin/settings", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
