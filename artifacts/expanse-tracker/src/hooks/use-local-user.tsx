@@ -24,16 +24,17 @@ export function useLocalUser() {
   const {
     data: user = null,
     isPending: isProfilePending,
+    isError: isProfileError,
   } = useQuery<LocalUser>({
     queryKey: ["local-user-profile"],
     queryFn: async () => {
       const res = await fetch(`${BASE_URL}/api/user/profile`);
-      if (!res.ok) throw new Error("Failed to fetch profile");
+      if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
       return res.json();
     },
     enabled: !!isSignedIn && isLoaded,
     staleTime: 60_000,
-    retry: false,
+    retry: 1,
   });
 
   const logout = () =>
@@ -50,6 +51,7 @@ export function useLocalUser() {
     user,
     isAuthenticated: !!isSignedIn && isLoaded,
     isLoading,
+    isError: isProfileError,
     logout,
     updateUser,
   };

@@ -31,7 +31,12 @@ function publicUser(user: typeof usersTable.$inferSelect) {
 
 // GET — return the JIT-provisioned local user attached by requireAuth
 router.get("/user/profile", requireAuth, async (req, res): Promise<void> => {
-  res.json(publicUser(req.localUser!));
+  try {
+    res.json(publicUser(req.localUser!));
+  } catch (err) {
+    console.error("GET /user/profile error:", err);
+    res.status(500).json({ error: "Failed to load profile" });
+  }
 });
 
 // PATCH — set account type during onboarding (called once, after sign-up)

@@ -164,19 +164,23 @@ function HomeRedirect() {
 
 function PrivateRoute({ component: Component }: { component: React.ComponentType }) {
   const { isSignedIn, isLoaded } = useAuth();
-  const { user, isLoading: userLoading } = useLocalUser();
+  const { user, isLoading: userLoading, isError: profileError } = useLocalUser();
   const [, navigate] = useLocation();
 
   useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) { navigate("/"); return; }
+    // Profile fetch failed — send back to home so user can re-authenticate
+    if (!userLoading && profileError) { navigate("/"); return; }
     // Once user profile is fetched, gate on onboarding
     if (!userLoading && user && user.accountType === null) {
       navigate("/onboarding");
     }
-  }, [isSignedIn, isLoaded, user, userLoading, navigate]);
+  }, [isSignedIn, isLoaded, user, userLoading, profileError, navigate]);
 
-  if (!isLoaded || !isSignedIn || userLoading || !user) return null;
+  // Show spinner while loading; if error, navigation effect handles redirect
+  if (!isLoaded || !isSignedIn || userLoading) return null;
+  if (profileError || !user) return null;
   if (user.accountType === null) return null;
   return <Component />;
 }
