@@ -106,7 +106,7 @@ router.post("/payments/submit", requireAuth, async (req, res): Promise<void> => 
 
   const [created] = await db
     .insert(paymentRequestsTable)
-    .values({ userId, planId, paymentMethod, senderNumber, trxId })
+    .values({ userId, planId, amount: plan.price, paymentMethod, senderNumber, trxId })
     .returning();
 
   res.status(201).json({ id: created.id, status: created.status });

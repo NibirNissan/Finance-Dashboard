@@ -467,18 +467,18 @@ export default function Dashboard() {
       </aside>
       <main className="md:ml-[238px]">
         {settings?.isAnnouncementActive && settings?.announcementText && (
-          <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 text-sm text-amber-800 text-center font-medium">
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 text-sm text-amber-800 text-center font-medium dark:bg-amber-950/60 dark:border-amber-800 dark:text-amber-300">
             📢 {settings.announcementText}
           </div>
         )}
         {paymentStatus?.status === "pending" && (
-          <div className="bg-blue-50 border-b border-blue-200 px-6 py-3 text-sm text-blue-800 text-center font-medium flex items-center justify-center gap-2">
+          <div className="bg-blue-50 border-b border-blue-200 px-6 py-3 text-sm text-blue-800 text-center font-medium flex items-center justify-center gap-2 dark:bg-blue-950/60 dark:border-blue-800 dark:text-blue-300">
             <Clock size={15} className="flex-shrink-0" />
             <span>Your plan upgrade is pending review. We'll activate it once verified.</span>
           </div>
         )}
         {paymentStatus?.status === "rejected" && (
-          <div className="bg-red-50 border-b border-red-200 px-6 py-3 text-sm text-red-800 text-center font-medium flex items-center justify-center gap-2">
+          <div className="bg-red-50 border-b border-red-200 px-6 py-3 text-sm text-red-800 text-center font-medium flex items-center justify-center gap-2 dark:bg-red-950/60 dark:border-red-800 dark:text-red-300">
             <X size={15} className="flex-shrink-0" />
             <span>
               Your payment could not be verified.{" "}

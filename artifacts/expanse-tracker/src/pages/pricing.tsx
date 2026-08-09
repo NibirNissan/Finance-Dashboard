@@ -233,26 +233,28 @@ export default function Pricing() {
       {/* Payment Modal */}
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md dark:bg-slate-800 dark:shadow-black/40">
 
             {step === "instructions" ? (
               <>
-                <h2 className="text-xl font-semibold text-stone-900 mb-1">Pay to subscribe</h2>
-                <p className="text-stone-500 text-sm mb-6">
-                  Subscribe to <strong>{modal.planName}</strong> — ৳{modal.price}{" "}
+                <h2 className="text-xl font-semibold text-stone-900 mb-1 dark:text-white">Pay to subscribe</h2>
+                <p className="text-stone-500 text-sm mb-6 dark:text-slate-400">
+                  Subscribe to <strong className="dark:text-slate-200">{modal.planName}</strong> — ৳{modal.price}{" "}
                   / {modal.durationInMonths === 1 ? "month" : `${modal.durationInMonths} months`}
                 </p>
 
                 <div className="mb-5">
-                  <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Pay via</p>
-                  <div className="flex rounded-xl border border-stone-200 overflow-hidden">
+                  <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2 dark:text-slate-400">Pay via</p>
+                  <div className="flex rounded-xl border border-stone-200 overflow-hidden dark:border-slate-600">
                     {(["bKash", "Nagad"] as const).map((m) => (
                       <button
                         key={m}
                         onClick={() => setPayMethod(m)}
                         className={cn(
                           "flex-1 py-2.5 text-sm font-semibold transition-colors",
-                          payMethod === m ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-50"
+                          payMethod === m
+                            ? "bg-stone-900 text-white dark:bg-slate-600 dark:text-white"
+                            : "text-stone-500 hover:bg-stone-50 dark:text-slate-400 dark:hover:bg-slate-700"
                         )}
                       >
                         {m}
@@ -261,13 +263,13 @@ export default function Pricing() {
                   </div>
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 space-y-2 text-sm text-amber-900">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 space-y-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200">
                   <p className="font-semibold">Send money and get verified</p>
-                  <ol className="list-decimal list-inside space-y-1.5 text-amber-800">
+                  <ol className="list-decimal list-inside space-y-1.5 text-amber-800 dark:text-amber-300">
                     <li>Open your <strong>{payMethod}</strong> app</li>
                     <li>
                       Send <strong>৳{modal.price}</strong> to{" "}
-                      <span className="font-mono font-bold bg-amber-100 px-1.5 py-0.5 rounded">
+                      <span className="font-mono font-bold bg-amber-100 px-1.5 py-0.5 rounded dark:bg-amber-900/60 dark:text-amber-200">
                         {activeNumber || "—"}
                       </span>
                     </li>
@@ -277,28 +279,30 @@ export default function Pricing() {
                 </div>
 
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={closeModal} className="flex-1 border-stone-200">Cancel</Button>
-                  <Button onClick={() => setStep("form")} className="flex-1 bg-stone-900 hover:bg-stone-800 text-white">
+                  <Button variant="outline" onClick={closeModal} className="flex-1 border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-slate-600 dark:text-slate-200 dark:bg-transparent dark:hover:bg-slate-700">Cancel</Button>
+                  <Button onClick={() => setStep("form")} className="flex-1 bg-stone-900 hover:bg-stone-800 text-white dark:bg-amber-500 dark:hover:bg-amber-400 dark:text-stone-900">
                     I've sent the money →
                   </Button>
                 </div>
               </>
             ) : (
               <>
-                <h2 className="text-xl font-semibold text-stone-900 mb-1">Enter payment details</h2>
-                <p className="text-stone-500 text-sm mb-6">We'll verify your transaction and activate your subscription.</p>
+                <h2 className="text-xl font-semibold text-stone-900 mb-1 dark:text-white">Enter payment details</h2>
+                <p className="text-stone-500 text-sm mb-6 dark:text-slate-400">We'll verify your transaction and activate your subscription.</p>
 
                 <div className="space-y-4 mb-6">
                   <div>
-                    <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Payment method</p>
-                    <div className="flex rounded-xl border border-stone-200 overflow-hidden">
+                    <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5 dark:text-slate-400">Payment method</p>
+                    <div className="flex rounded-xl border border-stone-200 overflow-hidden dark:border-slate-600">
                       {(["bKash", "Nagad"] as const).map((m) => (
                         <button
                           key={m}
                           onClick={() => setPayMethod(m)}
                           className={cn(
                             "flex-1 py-2.5 text-sm font-semibold transition-colors",
-                            payMethod === m ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-50"
+                            payMethod === m
+                              ? "bg-stone-900 text-white dark:bg-slate-600 dark:text-white"
+                              : "text-stone-500 hover:bg-stone-50 dark:text-slate-400 dark:hover:bg-slate-700"
                           )}
                         >
                           {m}
@@ -308,7 +312,7 @@ export default function Pricing() {
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">
+                    <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5 dark:text-slate-400">
                       Your {payMethod} number
                     </label>
                     <input
@@ -316,12 +320,12 @@ export default function Pricing() {
                       placeholder="e.g. 01XXXXXXXXX"
                       value={senderNumber}
                       onChange={(e) => setSenderNumber(e.target.value)}
-                      className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-stone-400"
+                      className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-stone-400 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-500 dark:focus:border-slate-400"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">
+                    <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5 dark:text-slate-400">
                       Transaction ID (TrxID)
                     </label>
                     <input
@@ -329,19 +333,19 @@ export default function Pricing() {
                       placeholder="e.g. ABC123DEF456"
                       value={trxId}
                       onChange={(e) => setTrxId(e.target.value.trim())}
-                      className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-stone-400"
+                      className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-stone-400 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-500 dark:focus:border-slate-400"
                     />
                   </div>
                 </div>
 
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setStep("instructions")} disabled={submitPayment.isPending} className="flex-1 border-stone-200">
+                  <Button variant="outline" onClick={() => setStep("instructions")} disabled={submitPayment.isPending} className="flex-1 border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-slate-600 dark:text-slate-200 dark:bg-transparent dark:hover:bg-slate-700">
                     ← Back
                   </Button>
                   <Button
                     onClick={() => submitPayment.mutate()}
                     disabled={submitPayment.isPending || !senderNumber.trim() || !trxId.trim()}
-                    className="flex-1 bg-stone-900 hover:bg-stone-800 text-white"
+                    className="flex-1 bg-stone-900 hover:bg-stone-800 text-white dark:bg-amber-500 dark:hover:bg-amber-400 dark:text-stone-900"
                   >
                     {submitPayment.isPending ? "Submitting…" : "Submit for verification"}
                   </Button>

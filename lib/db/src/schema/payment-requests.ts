@@ -13,10 +13,13 @@ export const paymentRequestsTable = pgTable("payment_requests", {
   planId: integer("plan_id")
     .notNull()
     .references(() => pricingPlansTable.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
   paymentMethod: paymentMethodEnum("payment_method").notNull(),
   senderNumber: text("sender_number").notNull(),
-  trxId: text("trx_id").notNull().unique(),
+  trxId: text("transaction_id").notNull(),
   status: paymentStatusEnum("status").notNull().default("pending"),
+  reviewedBy: integer("reviewed_by").references(() => usersTable.id),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
