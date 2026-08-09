@@ -85,6 +85,7 @@ export default function Pricing() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["payment-pending"] });
+      void qc.invalidateQueries({ queryKey: ["payment-my-requests"] });
       void refetchPending();
       closeModal();
       toast({

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db, paymentRequestsTable, pricingPlansTable, systemSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 
@@ -13,7 +13,28 @@ const SubmitBody = z.object({
   trxId: z.string().min(3).max(60),
 });
 
-// GET /api/payments/pending — check if the current user has a pending payment request
+// GET /api/payments/my-requests — return the current user's latest payment request status
+router.get("/payments/my-requests", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.localUser!.id;
+
+  // Fetch the single most recent request for this user
+  const rows = await db
+    .select()
+    .from(paymentRequestsTable)
+    .where(eq(paymentRequestsTable.userId, userId))
+    .orderBy(desc(paymentRequestsTable.createdAt))
+    .limit(1);
+
+  if (rows.length === 0 || rows[0].status === "approved") {
+    // No requests, or the latest is approved — plan is active, no banner needed
+    res.json({ status: "none", request: null });
+    return;
+  }
+
+  res.json({ status: rows[0].status, request: rows[0] });
+});
+
+// GET /api/payments/pending — check if the current user has a pending payment request (legacy)
 router.get("/payments/pending", requireAuth, async (req, res): Promise<void> => {
   const userId = req.localUser!.id;
   const rows = await db

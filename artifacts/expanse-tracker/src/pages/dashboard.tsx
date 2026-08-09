@@ -267,9 +267,9 @@ export default function Dashboard() {
     queryFn: async () => { const r = await fetch(`${BASE_URL}/api/settings`); return r.json(); },
     staleTime: 30_000,
   });
-  const { data: pendingPayment } = useQuery<{ hasPending: boolean; request: { paymentMethod: string; trxId: string } | null }>({
-    queryKey: ["payment-pending"],
-    queryFn: async () => { const r = await fetch(`${BASE_URL}/api/payments/pending`); return r.json(); },
+  const { data: paymentStatus } = useQuery<{ status: "none" | "pending" | "rejected"; request: { paymentMethod: string; trxId: string } | null }>({
+    queryKey: ["payment-my-requests"],
+    queryFn: async () => { const r = await fetch(`${BASE_URL}/api/payments/my-requests`); return r.json(); },
     staleTime: 60_000,
     enabled: !!user,
   });
@@ -471,12 +471,23 @@ export default function Dashboard() {
             📢 {settings.announcementText}
           </div>
         )}
-        {pendingPayment?.hasPending && (
+        {paymentStatus?.status === "pending" && (
           <div className="bg-blue-50 border-b border-blue-200 px-6 py-3 text-sm text-blue-800 text-center font-medium flex items-center justify-center gap-2">
             <Clock size={15} className="flex-shrink-0" />
+            <span>Your plan upgrade is pending review. We'll activate it once verified.</span>
+          </div>
+        )}
+        {paymentStatus?.status === "rejected" && (
+          <div className="bg-red-50 border-b border-red-200 px-6 py-3 text-sm text-red-800 text-center font-medium flex items-center justify-center gap-2">
+            <X size={15} className="flex-shrink-0" />
             <span>
-              Your payment via <strong>{pendingPayment.request?.paymentMethod}</strong> is pending verification.
-              Your subscription will be activated once an admin approves it.
+              Your payment could not be verified.{" "}
+              <button
+                onClick={() => navigate("/pricing")}
+                className="underline underline-offset-2 hover:opacity-75"
+              >
+                Please resubmit on the pricing page.
+              </button>
             </span>
           </div>
         )}
