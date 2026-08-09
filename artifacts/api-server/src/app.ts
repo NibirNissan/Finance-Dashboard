@@ -10,6 +10,8 @@ import {
   clerkProxyMiddleware,
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
+import path from "path";
+import fs from "fs";
 
 const app: Express = express();
 
@@ -51,5 +53,21 @@ app.use(
 );
 
 app.use("/api", router);
+
+// In production, serve the built Vite frontend and fall back to index.html
+// for client-side routing. __dirname is injected by the esbuild banner and
+// resolves to artifacts/api-server/dist — two levels up reaches the web dist.
+if (process.env.NODE_ENV === "production") {
+  const frontendDist = path.resolve(
+    __dirname,
+    "../../expanse-tracker/dist/public",
+  );
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(frontendDist, "index.html"));
+    });
+  }
+}
 
 export default app;
